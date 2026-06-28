@@ -81,6 +81,13 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Belle Rosé — Agendamento de Salão" },
       { name: "description", content: "Agende horários com nossas cabeleireiras e manicures em um sistema elegante e simples." },
       { property: "og:type", content: "website" },
+      { property: "og:title", content: "Belle Rosé — Agendamento de Salão" },
+      { name: "twitter:title", content: "Belle Rosé — Agendamento de Salão" },
+      { property: "og:description", content: "Agende horários com nossas cabeleireiras e manicures em um sistema elegante e simples." },
+      { name: "twitter:description", content: "Agende horários com nossas cabeleireiras e manicures em um sistema elegante e simples." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/befbbc2b-714c-4b78-917d-975b766180c7" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/befbbc2b-714c-4b78-917d-975b766180c7" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       { rel: "stylesheet", href: appCss },
