@@ -3,10 +3,12 @@ import { z } from "zod";
 import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
 
 async function assertStaff(context: { supabase: any; userId: string }) {
-  const { data } = await context.supabase
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { data, error } = await supabaseAdmin
     .from("user_roles")
     .select("role")
     .eq("user_id", context.userId);
+  if (error) throw new Error(error.message);
   const roles = (data ?? []).map((r: any) => r.role);
   if (!roles.length) throw new Error("Acesso negado");
   return roles as string[];
