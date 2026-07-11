@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  LogOut, Sparkles, Calendar, Users, Scissors, Tag, LayoutDashboard, Plus, Trash2, Edit, X,
+  LogOut, Calendar, Users, Scissors, Tag, LayoutDashboard, Plus, Trash2, Edit, X, Settings,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 
@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,12 +25,14 @@ import {
   upsertProcedure, deleteProcedure,
   listAllProfessionals, createProfessional, toggleProfessional, deleteProfessional,
   upsertPromotion, deletePromotion, listAllPromotions,
+  updateSalonSettings,
 } from "@/lib/admin.functions";
-import { listProcedures } from "@/lib/booking.functions";
+import { listProcedures, getSalonSettings } from "@/lib/booking.functions";
 import { blockToTime, formatBRL, blocksToDuration } from "@/lib/time";
+import { BrandLogo } from "@/components/logo";
 
 export const Route = createFileRoute("/painel")({
-  head: () => ({ meta: [{ title: "Painel — Belle Rosé" }] }),
+  head: () => ({ meta: [{ title: "Painel — Vem Cá Menina" }] }),
   component: PanelPage,
 });
 
@@ -70,8 +72,8 @@ function PanelContent() {
       <header className="border-b bg-card">
         <div className="mx-auto max-w-7xl px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full gradient-rose flex items-center justify-center"><Sparkles className="h-4 w-4 text-primary-foreground" /></div>
-            <span className="font-display text-xl">Belle Rosé</span>
+            <BrandLogo className="h-9 w-9" />
+            <span className="font-display text-xl">Vem Cá Menina</span>
             <Badge variant="secondary" className="ml-2 text-xs">{isAdmin ? "Admin" : "Profissional"}</Badge>
           </Link>
           <div className="flex items-center gap-3">
@@ -89,6 +91,7 @@ function PanelContent() {
             <TabsTrigger value="procs"><Scissors className="h-4 w-4 mr-1" />Procedimentos</TabsTrigger>
             <TabsTrigger value="promos"><Tag className="h-4 w-4 mr-1" />Promoções</TabsTrigger>
             {isAdmin && <TabsTrigger value="profs"><Users className="h-4 w-4 mr-1" />Profissionais</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="settings"><Settings className="h-4 w-4 mr-1" />Configurações</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="dash" className="mt-6"><DashboardTab /></TabsContent>
@@ -96,6 +99,7 @@ function PanelContent() {
           <TabsContent value="procs" className="mt-6"><ProceduresTab /></TabsContent>
           <TabsContent value="promos" className="mt-6"><PromotionsTab /></TabsContent>
           {isAdmin && <TabsContent value="profs" className="mt-6"><ProfessionalsTab /></TabsContent>}
+          {isAdmin && <TabsContent value="settings" className="mt-6"><SettingsTab /></TabsContent>}
         </Tabs>
       </main>
     </div>
