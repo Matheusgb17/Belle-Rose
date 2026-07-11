@@ -16,7 +16,7 @@ import { lookupAppointmentsByPhone, cancelAppointmentByPhone } from "@/lib/booki
 import { blockToTime, formatBRL } from "@/lib/time";
 
 export const Route = createFileRoute("/meus-agendamentos")({
-  head: () => ({ meta: [{ title: "Meus agendamentos — Belle Rosé" }, { name: "description", content: "Consulte e cancele agendamentos pelo seu telefone." }] }),
+  head: () => ({ meta: [{ title: "Meus agendamentos — Vem Cá Menina" }, { name: "description", content: "Consulte e cancele agendamentos pelo seu telefone." }] }),
   component: MyAppointmentsPage,
 });
 

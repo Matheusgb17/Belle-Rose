@@ -387,3 +387,58 @@ export const meRoles = createServerFn({ method: "GET" })
       profile: prof,
     };
   });
+
+// ---------- Salon settings ----------
+
+export const updateSalonSettings = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      name: string;
+      tagline?: string;
+      address?: string;
+      phone?: string;
+      whatsapp?: string;
+      instagram_url?: string;
+      facebook_url?: string;
+    }) =>
+      z
+        .object({
+          name: z.string().trim().min(2).max(120),
+          tagline: z.string().max(240).optional(),
+          address: z.string().max(240).optional(),
+          phone: z.string().max(40).optional(),
+          whatsapp: z.string().max(40).optional(),
+          instagram_url: z.string().max(240).optional().or(z.literal("")),
+          facebook_url: z.string().max(240).optional().or(z.literal("")),
+        })
+        .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertAdmin(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data: existing } = await supabaseAdmin
+      .from("salon_settings")
+      .select("id")
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    const payload = {
+      name: data.name,
+      tagline: data.tagline ?? "",
+      address: data.address ?? "",
+      phone: data.phone ?? "",
+      whatsapp: data.whatsapp ?? "",
+      instagram_url: data.instagram_url ?? "",
+      facebook_url: data.facebook_url ?? "",
+    };
+    if (existing) {
+      const { error } = await supabaseAdmin.from("salon_settings").update(payload).eq("id", existing.id);
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await supabaseAdmin.from("salon_settings").insert(payload);
+      if (error) throw new Error(error.message);
+    }
+    return { ok: true };
+  });
+
