@@ -60,9 +60,11 @@ export type Database = {
         Row: {
           client_id: string
           created_at: string
+          group_id: string | null
           id: string
           notes: string | null
           professional_id: string
+          promotion_id: string | null
           scheduled_date: string
           start_block: number
           status: Database["public"]["Enums"]["appointment_status"]
@@ -72,9 +74,11 @@ export type Database = {
         Insert: {
           client_id: string
           created_at?: string
+          group_id?: string | null
           id?: string
           notes?: string | null
           professional_id: string
+          promotion_id?: string | null
           scheduled_date: string
           start_block: number
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -84,9 +88,11 @@ export type Database = {
         Update: {
           client_id?: string
           created_at?: string
+          group_id?: string | null
           id?: string
           notes?: string | null
           professional_id?: string
+          promotion_id?: string | null
           scheduled_date?: string
           start_block?: number
           status?: Database["public"]["Enums"]["appointment_status"]
@@ -106,6 +112,13 @@ export type Database = {
             columns: ["professional_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "appointments_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
             referencedColumns: ["id"]
           },
         ]
@@ -269,6 +282,45 @@ export type Database = {
           original_price?: number
           promo_price?: number
           start_date?: string
+        }
+        Relationships: []
+      }
+      salon_settings: {
+        Row: {
+          address: string | null
+          created_at: string
+          facebook_url: string | null
+          id: string
+          instagram_url: string | null
+          name: string
+          phone: string | null
+          tagline: string | null
+          updated_at: string
+          whatsapp: string | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          facebook_url?: string | null
+          id?: string
+          instagram_url?: string | null
+          name?: string
+          phone?: string | null
+          tagline?: string | null
+          updated_at?: string
+          whatsapp?: string | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          facebook_url?: string | null
+          id?: string
+          instagram_url?: string | null
+          name?: string
+          phone?: string | null
+          tagline?: string | null
+          updated_at?: string
+          whatsapp?: string | null
         }
         Relationships: []
       }

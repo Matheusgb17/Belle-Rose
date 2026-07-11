@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  LogOut, Sparkles, Calendar, Users, Scissors, Tag, LayoutDashboard, Plus, Trash2, Edit, X,
+  LogOut, Calendar, Users, Scissors, Tag, LayoutDashboard, Plus, Trash2, Edit, X, Settings,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 
@@ -16,7 +16,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,12 +25,14 @@ import {
   upsertProcedure, deleteProcedure,
   listAllProfessionals, createProfessional, toggleProfessional, deleteProfessional,
   upsertPromotion, deletePromotion, listAllPromotions,
+  updateSalonSettings,
 } from "@/lib/admin.functions";
-import { listProcedures } from "@/lib/booking.functions";
+import { listProcedures, getSalonSettings } from "@/lib/booking.functions";
 import { blockToTime, formatBRL, blocksToDuration } from "@/lib/time";
+import { BrandLogo } from "@/components/logo";
 
 export const Route = createFileRoute("/painel")({
-  head: () => ({ meta: [{ title: "Painel — Belle Rosé" }] }),
+  head: () => ({ meta: [{ title: "Painel — Vem Cá Menina" }] }),
   component: PanelPage,
 });
 
@@ -70,8 +72,8 @@ function PanelContent() {
       <header className="border-b bg-card">
         <div className="mx-auto max-w-7xl px-4 h-16 flex items-center justify-between">
           <Link to="/" className="flex items-center gap-2">
-            <div className="h-8 w-8 rounded-full gradient-rose flex items-center justify-center"><Sparkles className="h-4 w-4 text-primary-foreground" /></div>
-            <span className="font-display text-xl">Belle Rosé</span>
+            <BrandLogo className="h-9 w-9" />
+            <span className="font-display text-xl">Vem Cá Menina</span>
             <Badge variant="secondary" className="ml-2 text-xs">{isAdmin ? "Admin" : "Profissional"}</Badge>
           </Link>
           <div className="flex items-center gap-3">
@@ -89,6 +91,7 @@ function PanelContent() {
             <TabsTrigger value="procs"><Scissors className="h-4 w-4 mr-1" />Procedimentos</TabsTrigger>
             <TabsTrigger value="promos"><Tag className="h-4 w-4 mr-1" />Promoções</TabsTrigger>
             {isAdmin && <TabsTrigger value="profs"><Users className="h-4 w-4 mr-1" />Profissionais</TabsTrigger>}
+            {isAdmin && <TabsTrigger value="settings"><Settings className="h-4 w-4 mr-1" />Configurações</TabsTrigger>}
           </TabsList>
 
           <TabsContent value="dash" className="mt-6"><DashboardTab /></TabsContent>
@@ -96,6 +99,7 @@ function PanelContent() {
           <TabsContent value="procs" className="mt-6"><ProceduresTab /></TabsContent>
           <TabsContent value="promos" className="mt-6"><PromotionsTab /></TabsContent>
           {isAdmin && <TabsContent value="profs" className="mt-6"><ProfessionalsTab /></TabsContent>}
+          {isAdmin && <TabsContent value="settings" className="mt-6"><SettingsTab /></TabsContent>}
         </Tabs>
       </main>
     </div>
@@ -481,6 +485,93 @@ function ProfessionalsTab() {
           <DialogFooter><Button onClick={() => create.mutate()} disabled={create.isPending}>Criar</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+/* ---------------- Settings ---------------- */
+function SettingsTab() {
+  const qc = useQueryClient();
+  const settings = useQuery({ queryKey: ["salon-settings"], queryFn: () => getSalonSettings() });
+  const updateFn = useServerFn(updateSalonSettings);
+  const [form, setForm] = useState<any>(null);
+
+  useEffect(() => {
+    if (settings.data && !form) {
+      setForm({
+        name: settings.data.name ?? "Vem Cá Menina",
+        tagline: settings.data.tagline ?? "",
+        address: settings.data.address ?? "",
+        phone: settings.data.phone ?? "",
+        whatsapp: settings.data.whatsapp ?? "",
+        instagram_url: settings.data.instagram_url ?? "",
+        facebook_url: settings.data.facebook_url ?? "",
+      });
+    }
+  }, [settings.data, form]);
+
+  const save = useMutation({
+    mutationFn: (d: any) => updateFn({ data: d }),
+    onSuccess: () => {
+      toast.success("Configurações salvas");
+      qc.invalidateQueries({ queryKey: ["salon-settings"] });
+    },
+    onError: (e: any) => toast.error(e?.message),
+  });
+
+  if (!form) return <p className="text-muted-foreground">Carregando…</p>;
+
+  return (
+    <div className="max-w-2xl">
+      <h2 className="font-display text-2xl mb-1">Configurações do salão</h2>
+      <p className="text-sm text-muted-foreground mb-6">
+        Endereço, telefone e redes sociais aparecem no site inteiro e na confirmação de agendamentos.
+      </p>
+      <Card className="p-6 space-y-4">
+        <div>
+          <Label>Nome do salão</Label>
+          <Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+        </div>
+        <div>
+          <Label>Frase de destaque</Label>
+          <Input
+            value={form.tagline}
+            placeholder="Seu salão de beleza em Bragança Paulista"
+            onChange={(e) => setForm({ ...form, tagline: e.target.value })}
+          />
+        </div>
+        <div>
+          <Label>Endereço completo</Label>
+          <Textarea
+            value={form.address}
+            placeholder="Rua Exemplo, 123 — Centro, Bragança Paulista/SP"
+            onChange={(e) => setForm({ ...form, address: e.target.value })}
+          />
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Telefone</Label>
+            <Input value={form.phone} placeholder="(11) 99999-9999" onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          </div>
+          <div>
+            <Label>WhatsApp (opcional)</Label>
+            <Input value={form.whatsapp} placeholder="(11) 99999-9999" onChange={(e) => setForm({ ...form, whatsapp: e.target.value })} />
+          </div>
+        </div>
+        <div>
+          <Label>Instagram (URL)</Label>
+          <Input value={form.instagram_url} placeholder="https://instagram.com/vemcamenina" onChange={(e) => setForm({ ...form, instagram_url: e.target.value })} />
+        </div>
+        <div>
+          <Label>Facebook (URL)</Label>
+          <Input value={form.facebook_url} placeholder="https://facebook.com/vemcamenina" onChange={(e) => setForm({ ...form, facebook_url: e.target.value })} />
+        </div>
+        <div className="pt-2">
+          <Button onClick={() => save.mutate(form)} disabled={save.isPending}>
+            {save.isPending ? "Salvando…" : "Salvar configurações"}
+          </Button>
+        </div>
+      </Card>
     </div>
   );
 }

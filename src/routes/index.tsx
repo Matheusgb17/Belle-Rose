@@ -1,20 +1,21 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Search, Sparkles, Scissors, Hand, Star, Clock, ShieldCheck } from "lucide-react";
+import { Calendar, Search, Sparkles, Scissors, Hand, Star, MapPin, Phone, Instagram, Facebook } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { SiteHeader, SiteFooter } from "@/components/site-chrome";
+import { SiteHeader, SiteFooter, useSalonSettings } from "@/components/site-chrome";
 import { listActivePromotions, listProcedures } from "@/lib/booking.functions";
 import { formatBRL, blocksToDuration } from "@/lib/time";
+import { BrandLogo } from "@/components/logo";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Belle Rosé — Salão de Beleza" },
-      { name: "description", content: "Agende seu horário online com nossas cabeleireiras e manicures. Cabelo, unhas e estética em um só lugar." },
-      { property: "og:title", content: "Belle Rosé — Salão de Beleza" },
-      { property: "og:description", content: "Agende seu horário online com nossas cabeleireiras e manicures." },
+      { title: "Vem Cá Menina — Salão de Beleza em Bragança Paulista" },
+      { name: "description", content: "Salão de beleza em Bragança Paulista. Agende online cabelo e unhas com nossas cabeleireiras e manicures." },
+      { property: "og:title", content: "Vem Cá Menina — Salão de Beleza em Bragança Paulista" },
+      { property: "og:description", content: "Agende cabelo e unhas online no nosso salão em Bragança Paulista." },
     ],
   }),
   component: HomePage,
@@ -23,6 +24,8 @@ export const Route = createFileRoute("/")({
 function HomePage() {
   const promos = useQuery({ queryKey: ["home-promos"], queryFn: () => listActivePromotions() });
   const procs = useQuery({ queryKey: ["home-procs"], queryFn: () => listProcedures() });
+  const settings = useSalonSettings();
+  const s = settings.data;
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -32,49 +35,100 @@ function HomePage() {
       <section className="relative overflow-hidden gradient-hero">
         <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-primary/15 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-accent/30 blur-3xl" />
-        <div className="relative mx-auto max-w-6xl px-4 py-20 md:py-28">
-          <Badge variant="secondary" className="mb-6 px-4 py-1 text-xs tracking-widest uppercase">
-            <Sparkles className="h-3 w-3 mr-1 inline" /> Beleza & Bem-estar
-          </Badge>
-          <h1 className="font-display text-5xl md:text-7xl font-medium leading-[1.05] max-w-3xl">
-            Sua beleza, cuidada com <span className="italic text-primary">delicadeza</span>.
-          </h1>
-          <p className="mt-6 max-w-xl text-lg text-muted-foreground">
-            Agende online com nossas cabeleireiras e manicures. Escolha seus serviços, monte seu carrinho e receba a melhor experiência.
-          </p>
-          <div className="mt-10 flex flex-wrap gap-3">
-            <Link to="/agendar">
-              <Button size="lg" className="rounded-full h-12 px-8 shadow-elegant gap-2">
-                <Calendar className="h-4 w-4" />
-                Agendar horário
-              </Button>
-            </Link>
-            <Link to="/meus-agendamentos">
-              <Button size="lg" variant="outline" className="rounded-full h-12 px-8 gap-2">
-                <Search className="h-4 w-4" />
-                Consultar / cancelar
-              </Button>
-            </Link>
-          </div>
-
-          <div className="mt-14 grid grid-cols-1 md:grid-cols-3 gap-4 max-w-3xl">
-            {[
-              { icon: Clock, label: "Agenda inteligente", desc: "Sem conflitos de horário" },
-              { icon: Star, label: "Profissionais escolhidas", desc: "Por você, no momento" },
-              { icon: ShieldCheck, label: "Cancelamento fácil", desc: "Com seu telefone" },
-            ].map((f) => (
-              <div key={f.label} className="flex items-center gap-3 rounded-2xl bg-card/70 backdrop-blur p-4 border border-border/60">
-                <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                  <f.icon className="h-5 w-5" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium">{f.label}</p>
-                  <p className="text-xs text-muted-foreground">{f.desc}</p>
-                </div>
+        <div className="relative mx-auto max-w-6xl px-4 py-16 md:py-24">
+          <div className="flex flex-col md:flex-row items-center gap-8">
+            <BrandLogo className="h-32 w-32 md:h-40 md:w-40 shrink-0" />
+            <div>
+              <Badge variant="secondary" className="mb-4 px-4 py-1 text-xs tracking-widest uppercase">
+                <Sparkles className="h-3 w-3 mr-1 inline" /> Bragança Paulista • SP
+              </Badge>
+              <h1 className="font-display text-5xl md:text-7xl font-medium leading-[1.05]">
+                Vem <span className="italic text-primary">Cá</span> Menina
+              </h1>
+              <p className="mt-4 max-w-xl text-lg text-muted-foreground">
+                {s?.tagline || "Seu salão de beleza em Bragança Paulista"}. Agende online com nossas cabeleireiras e manicures — cabelo, unhas e cuidado, tudo no mesmo lugar.
+              </p>
+              <div className="mt-8 flex flex-wrap gap-3">
+                <Link to="/agendar">
+                  <Button size="lg" className="rounded-full h-12 px-8 shadow-elegant gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Agendar horário
+                  </Button>
+                </Link>
+                <Link to="/meus-agendamentos">
+                  <Button size="lg" variant="outline" className="rounded-full h-12 px-8 gap-2">
+                    <Search className="h-4 w-4" />
+                    Consultar / cancelar
+                  </Button>
+                </Link>
               </div>
-            ))}
+            </div>
           </div>
         </div>
+      </section>
+
+      {/* Contact Highlight */}
+      <section className="mx-auto max-w-6xl px-4 -mt-6 relative z-10">
+        <Card className="p-6 md:p-8 border-primary/20 shadow-elegant">
+          <div className="grid md:grid-cols-3 gap-6">
+            <div className="flex items-start gap-3">
+              <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <MapPin className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">Endereço</p>
+                {s?.address ? (
+                  <a
+                    href={`https://maps.google.com/?q=${encodeURIComponent(s.address)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="font-medium hover:text-primary block mt-0.5"
+                  >
+                    {s.address}
+                  </a>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-0.5">Configure no painel.</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <Phone className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">Telefone</p>
+                {s?.phone ? (
+                  <a href={`tel:${s.phone.replace(/\D/g, "")}`} className="font-medium hover:text-primary block mt-0.5">{s.phone}</a>
+                ) : (
+                  <p className="text-sm text-muted-foreground mt-0.5">Configure no painel.</p>
+                )}
+              </div>
+            </div>
+            <div className="flex items-start gap-3">
+              <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
+                <Instagram className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">Redes sociais</p>
+                <div className="flex gap-2 mt-1">
+                  {s?.instagram_url && (
+                    <a href={s.instagram_url} target="_blank" rel="noopener noreferrer" className="text-sm hover:text-primary flex items-center gap-1">
+                      <Instagram className="h-4 w-4" /> Instagram
+                    </a>
+                  )}
+                  {s?.facebook_url && (
+                    <a href={s.facebook_url} target="_blank" rel="noopener noreferrer" className="text-sm hover:text-primary flex items-center gap-1">
+                      <Facebook className="h-4 w-4" /> Facebook
+                    </a>
+                  )}
+                  {!s?.instagram_url && !s?.facebook_url && (
+                    <p className="text-sm text-muted-foreground">Em breve.</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        </Card>
       </section>
 
       {/* Categories */}
@@ -106,7 +160,7 @@ function HomePage() {
           <div className="flex items-end justify-between mb-6">
             <div>
               <h2 className="font-display text-3xl md:text-4xl">Promoções ativas</h2>
-              <p className="text-muted-foreground">Aproveite enquanto duram.</p>
+              <p className="text-muted-foreground">Aproveite enquanto duram. Selecione direto no agendamento.</p>
             </div>
           </div>
           <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
