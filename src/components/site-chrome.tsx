@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { Menu, X, Instagram, Facebook, MapPin, Phone } from "lucide-react";
+import { Menu, X, Instagram, Facebook, MapPin, MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/logo";
 import { getSalonSettings } from "@/lib/booking.functions";
+import { whatsappUrl } from "@/lib/time";
 
 export function useSalonSettings() {
   return useQuery({
