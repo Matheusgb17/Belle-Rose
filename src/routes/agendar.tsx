@@ -5,7 +5,7 @@ import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import {
   ChevronRight, ChevronLeft, ShoppingBag, Trash2, Check, User, Plus, Minus,
-  Scissors, Hand, Sparkles as SparkIcon, MapPin, Phone, Tag,
+  Scissors, Hand, Sparkles as SparkIcon, MapPin, MessageCircle, Tag,
 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -22,10 +22,10 @@ import {
   listProfessionals,
   listProcedures,
   listActivePromotions,
-  getAvailableSlots,
+  getDaySchedules,
   createAppointment,
 } from "@/lib/booking.functions";
-import { formatBRL, blocksToDuration, blockToTime } from "@/lib/time";
+import { formatBRL, blocksToDuration, blockToTime, whatsappUrl, OPEN_BLOCK, CLOSE_BLOCK } from "@/lib/time";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/agendar")({
@@ -35,24 +35,35 @@ export const Route = createFileRoute("/agendar")({
 
 type Step = 1 | 2 | 3 | 4 | 5 | 6;
 type CategoryChoice = "cabelo" | "unhas" | "ambos";
+type Role = "hairdresser" | "manicurist";
 
-const roleForCategory: Record<"cabelo" | "unhas", "hairdresser" | "manicurist"> = {
+const roleForCategory: Record<"cabelo" | "unhas", Role> = {
   cabelo: "hairdresser",
   unhas: "manicurist",
+};
+
+const roleIcon: Record<Role, typeof Scissors> = {
+  hairdresser: Scissors,
+  manicurist: Hand,
+};
+
+const roleLabel: Record<Role, string> = {
+  hairdresser: "Cabelo",
+  manicurist: "Unhas",
 };
 
 function BookPage() {
   const [step, setStep] = useState<Step>(1);
   const [categoryChoice, setCategoryChoice] = useState<CategoryChoice | null>(null);
-  const [selectedPros, setSelectedPros] = useState<Record<"hairdresser" | "manicurist", string | null>>({
+  const [selectedPros, setSelectedPros] = useState<Record<Role, string | null>>({
     hairdresser: null,
     manicurist: null,
   });
   const [cart, setCart] = useState<string[]>([]);
   const [appliedPromoId, setAppliedPromoId] = useState<string | null>(null);
   const [date, setDate] = useState<Date | undefined>(undefined);
-  const [startBlock, setStartBlock] = useState<number | null>(null);
-  const [client, setClient] = useState({ name: "", phone: "", email: "" });
+  const [startBlocks, setStartBlocks] = useState<Record<string, number | null>>({});
+  const [client, setClient] = useState({ name: "", phone: "" });
 
   const settings = useSalonSettings();
   const profs = useQuery({ queryKey: ["profs"], queryFn: () => listProfessionals() });
@@ -62,7 +73,6 @@ function BookPage() {
   const activeCategories: ("cabelo" | "unhas")[] =
     categoryChoice === "ambos" ? ["cabelo", "unhas"] : categoryChoice ? [categoryChoice] : [];
 
-  // Procedures available given the category filter (broader "cabelo" includes "estetica" for hairdresser? keep strict)
   const availableProcs = useMemo(() => {
     if (!procs.data) return [];
     return procs.data.filter((p: any) => activeCategories.includes(p.category as any));
@@ -75,13 +85,14 @@ function BookPage() {
 
   // Map procedures to their assigned professional based on category
   const proAssignments = useMemo(() => {
-    const map = new Map<"hairdresser" | "manicurist", { id: string; blocks: number; procs: any[] }>();
+    const map = new Map<Role, { role: Role; id: string; blocks: number; procs: any[] }>();
     for (const p of cartProcs) {
       const cat = p.category as "cabelo" | "unhas";
       const role = roleForCategory[cat];
+      if (!role) continue;
       const proId = selectedPros[role];
       if (!proId) continue;
-      const entry = map.get(role) ?? { id: proId, blocks: 0, procs: [] };
+      const entry = map.get(role) ?? { role, id: proId, blocks: 0, procs: [] };
       entry.procs.push(p);
       entry.blocks += p.duration_blocks;
       map.set(role, entry);
@@ -89,17 +100,22 @@ function BookPage() {
     return Array.from(map.values());
   }, [cartProcs, selectedPros]);
 
-  const originalTotal = cartProcs.reduce((s, p: any) => s + Number(p.price), 0);
   const activePromo = appliedPromoId ? (promos.data ?? []).find((p: any) => p.id === appliedPromoId) : null;
-  const finalTotal = activePromo ? Number(activePromo.promo_price) : originalTotal;
+  const promoProcIds = useMemo(
+    () => new Set<string>(activePromo ? (activePromo.promotion_procedures ?? []).map((pp: any) => pp.procedure_id) : []),
+    [activePromo],
+  );
+  const originalTotal = cartProcs.reduce((s, p: any) => s + Number(p.price), 0);
+  const extraProcsTotal = cartProcs.filter((p: any) => !promoProcIds.has(p.id)).reduce((s, p: any) => s + Number(p.price), 0);
+  const finalTotal = activePromo ? Number(activePromo.promo_price) + extraProcsTotal : originalTotal;
   const maxBlocks = proAssignments.length ? Math.max(...proAssignments.map((p) => p.blocks)) : 0;
 
   const dateStr = date ? format(date, "yyyy-MM-dd") : null;
 
-  const slotsQuery = useQuery({
-    queryKey: ["slots", dateStr, proAssignments.map((p) => `${p.id}:${p.blocks}`).join(",")],
+  const schedulesQuery = useQuery({
+    queryKey: ["schedules", dateStr, proAssignments.map((p) => `${p.id}:${p.blocks}`).join(",")],
     queryFn: () =>
-      getAvailableSlots({
+      getDaySchedules({
         data: {
           date: dateStr!,
           professionals: proAssignments.map((p) => ({ id: p.id, blocks: p.blocks })),
@@ -108,6 +124,8 @@ function BookPage() {
     enabled: !!dateStr && proAssignments.length > 0 && step === 5,
   });
 
+  const allStartsPicked = proAssignments.length > 0 && proAssignments.every((p) => startBlocks[p.id] != null);
+
   const createFn = useServerFn(createAppointment);
   const submit = useMutation({
     mutationFn: () =>
@@ -115,13 +133,12 @@ function BookPage() {
         data: {
           clientName: client.name,
           clientPhone: client.phone,
-          clientEmail: client.email || undefined,
           date: dateStr!,
-          startBlock: startBlock!,
           promotionId: appliedPromoId ?? undefined,
           professionals: proAssignments.map((p) => ({
             professionalId: p.id,
             procedureIds: p.procs.map((x: any) => x.id),
+            startBlock: startBlocks[p.id]!,
           })),
         },
       }),
@@ -132,18 +149,13 @@ function BookPage() {
     onError: (e: any) => toast.error(e?.message ?? "Falha ao agendar"),
   });
 
-  const visiblePros = (profs.data ?? []).filter((p: any) =>
-    activeCategories.some((c) => p.roles?.includes(roleForCategory[c])),
-  );
-
   const toggleProc = (id: string) => {
+    const willRemove = cart.includes(id);
     setCart((c) => (c.includes(id) ? c.filter((x) => x !== id) : [...c, id]));
-    // Any manual cart change invalidates promo
-    setAppliedPromoId(null);
+    if (willRemove && promoProcIds.has(id)) setAppliedPromoId(null);
   };
 
   const applyPromo = (promo: any) => {
-    // Verify all promo procedures are compatible with active categories
     const procList = (promo.promotion_procedures ?? []).map((pp: any) => pp.procedures).filter(Boolean);
     const cats = new Set<string>(procList.map((p: any) => p.category));
     for (const c of cats) {
@@ -157,16 +169,11 @@ function BookPage() {
         return;
       }
     }
-    const ids = procList.map((p: any) => p.id);
-    setCart(ids);
+    const ids: string[] = procList.map((p: any) => p.id);
+    setCart((prev) => Array.from(new Set([...prev, ...ids])));
     setAppliedPromoId(promo.id);
     toast.success(`Promoção "${promo.name}" aplicada!`);
   };
-
-  const selectedProNames = proAssignments
-    .map((p) => (profs.data ?? []).find((x: any) => x.id === p.id)?.full_name)
-    .filter(Boolean)
-    .join(" e ");
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -197,6 +204,7 @@ function BookPage() {
                     setSelectedPros({ hairdresser: null, manicurist: null });
                     setCart([]);
                     setAppliedPromoId(null);
+                    setStartBlocks({});
                     setStep(2);
                   }}
                   className={cn(
@@ -267,7 +275,7 @@ function BookPage() {
               <Button variant="outline" onClick={() => setStep(1)} className="gap-1"><ChevronLeft className="h-4 w-4" /> Voltar</Button>
               <Button
                 disabled={activeCategories.some((c) => !selectedPros[roleForCategory[c]])}
-                onClick={() => { setCart([]); setAppliedPromoId(null); setStep(3); }}
+                onClick={() => { setCart([]); setAppliedPromoId(null); setStartBlocks({}); setStep(3); }}
                 className="gap-1"
               >
                 Continuar <ChevronRight className="h-4 w-4" />
@@ -280,9 +288,8 @@ function BookPage() {
         {step === 3 && (
           <Card className="p-6">
             <h2 className="font-display text-2xl mb-1">Escolha os procedimentos</h2>
-            <p className="text-sm text-muted-foreground mb-4">Selecione um ou mais. Ou aproveite uma promoção ativa abaixo.</p>
+            <p className="text-sm text-muted-foreground mb-4">Selecione um ou mais. Aproveite uma promoção ativa e adicione outros serviços — o desconto se mantém.</p>
 
-            {/* Promo highlight */}
             {promos.data && promos.data.length > 0 && (
               <div className="mb-6 -mx-2">
                 <p className="text-xs uppercase tracking-widest text-primary mb-2 px-2 flex items-center gap-1">
@@ -330,6 +337,7 @@ function BookPage() {
                   <div className="grid sm:grid-cols-2 gap-2">
                     {items.map((p: any) => {
                       const selected = cart.includes(p.id);
+                      const inPromo = promoProcIds.has(p.id);
                       return (
                         <button
                           key={p.id}
@@ -340,7 +348,10 @@ function BookPage() {
                           )}
                         >
                           <div className="min-w-0">
-                            <p className="font-medium truncate">{p.name}</p>
+                            <p className="font-medium truncate flex items-center gap-2">
+                              {p.name}
+                              {inPromo && <Badge variant="secondary" className="text-[10px]">promo</Badge>}
+                            </p>
                             <p className="text-xs text-muted-foreground">{blocksToDuration(p.duration_blocks)}</p>
                           </div>
                           <div className="text-right shrink-0">
@@ -372,9 +383,13 @@ function BookPage() {
             <p className="text-sm text-muted-foreground mb-6">Confira antes de escolher a data.</p>
             {proAssignments.map((entry) => {
               const pro = (profs.data ?? []).find((x: any) => x.id === entry.id);
+              const Icon = roleIcon[entry.role];
               return (
                 <div key={entry.id} className="mb-4 rounded-xl border p-4">
-                  <p className="text-sm font-medium mb-2">com <b>{pro?.full_name}</b> — {blocksToDuration(entry.blocks)}</p>
+                  <p className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-primary" />
+                    {roleLabel[entry.role]} — com <b>{pro?.full_name}</b> — {blocksToDuration(entry.blocks)}
+                  </p>
                   <ul className="divide-y">
                     {entry.procs.map((p: any) => (
                       <li key={p.id} className="flex items-center justify-between py-2">
@@ -395,7 +410,7 @@ function BookPage() {
             <CartSummary count={cart.length} maxBlocks={maxBlocks} finalTotal={finalTotal} originalTotal={originalTotal} promo={!!activePromo} />
             <Footer>
               <Button variant="outline" onClick={() => setStep(3)} className="gap-1"><ChevronLeft className="h-4 w-4" /> Voltar</Button>
-              <Button disabled={cart.length === 0} onClick={() => setStep(5)} className="gap-1">
+              <Button disabled={cart.length === 0} onClick={() => { setStartBlocks({}); setStep(5); }} className="gap-1">
                 Escolher data <ChevronRight className="h-4 w-4" />
               </Button>
             </Footer>
@@ -408,56 +423,57 @@ function BookPage() {
             <h2 className="font-display text-2xl mb-1">Data e horário</h2>
             <p className="text-sm text-muted-foreground mb-6">
               {proAssignments.length > 1
-                ? "Você e as profissionais começam no mesmo horário; a duração total é o serviço mais longo."
+                ? "Escolha a data e depois o horário de cada profissional. Cada agenda é independente, mas você não pode selecionar horários que se sobreponham."
                 : "Selecione a data e depois o horário disponível."}
             </p>
-            <div className="grid md:grid-cols-2 gap-6">
+            <div className="grid md:grid-cols-[auto,1fr] gap-6">
               <div>
                 <Label className="mb-2 block">Data</Label>
                 <div className="rounded-xl border bg-card p-2 inline-block">
                   <Calendar
                     mode="single"
                     selected={date}
-                    onSelect={(d) => { setDate(d); setStartBlock(null); }}
+                    onSelect={(d) => { setDate(d); setStartBlocks({}); }}
                     disabled={(d) => d < new Date(new Date().setHours(0, 0, 0, 0))}
                     locale={ptBR}
                     className="pointer-events-auto"
                   />
                 </div>
               </div>
-              <div>
-                <Label className="mb-2 block">Horários — {selectedProNames}</Label>
-                {!date && <p className="text-sm text-muted-foreground">Escolha uma data.</p>}
-                {date && slotsQuery.isLoading && <p className="text-sm text-muted-foreground">Buscando…</p>}
-                {date && slotsQuery.data && slotsQuery.data.length === 0 && (
-                  <p className="text-sm text-muted-foreground">Sem horários para esta data. Tente outro dia.</p>
-                )}
-                {date && slotsQuery.data && slotsQuery.data.length > 0 && (
-                  <div className="grid grid-cols-3 gap-2">
-                    {slotsQuery.data.map((b: number) => (
-                      <button
-                        key={b}
-                        onClick={() => setStartBlock(b)}
-                        className={cn(
-                          "py-2 rounded-lg border-2 text-sm font-medium transition",
-                          startBlock === b ? "border-primary bg-primary text-primary-foreground" : "border-border hover:border-primary/40",
-                        )}
-                      >
-                        {blockToTime(b)}
-                      </button>
-                    ))}
-                  </div>
-                )}
-                {startBlock !== null && (
-                  <div className="mt-4 rounded-lg bg-primary/5 p-3 text-sm">
-                    Início: <b>{blockToTime(startBlock)}</b> • Término: <b>{blockToTime(startBlock + maxBlocks)}</b>
-                  </div>
-                )}
+              <div className="space-y-6">
+                {!date && <p className="text-sm text-muted-foreground">Escolha uma data para ver os horários.</p>}
+                {date && schedulesQuery.isLoading && <p className="text-sm text-muted-foreground">Buscando horários…</p>}
+                {date && schedulesQuery.data && proAssignments.map((entry) => {
+                  const pro = (profs.data ?? []).find((x: any) => x.id === entry.id);
+                  const schedule = schedulesQuery.data!.find((s: any) => s.id === entry.id);
+                  if (!schedule) return null;
+                  const Icon = roleIcon[entry.role];
+                  const otherEntries = proAssignments.filter((o) => o.id !== entry.id);
+                  const selected = startBlocks[entry.id] ?? null;
+
+                  return (
+                    <ProScheduleGrid
+                      key={entry.id}
+                      icon={Icon}
+                      roleTitle={roleLabel[entry.role]}
+                      professionalName={pro?.full_name ?? ""}
+                      blocks={entry.blocks}
+                      busy={new Set<number>(schedule.busy)}
+                      available={new Set<number>(schedule.available)}
+                      selected={selected}
+                      otherSelections={otherEntries.map((o) => ({
+                        start: startBlocks[o.id] ?? null,
+                        blocks: o.blocks,
+                      }))}
+                      onPick={(b) => setStartBlocks((prev) => ({ ...prev, [entry.id]: prev[entry.id] === b ? null : b }))}
+                    />
+                  );
+                })}
               </div>
             </div>
             <Footer>
               <Button variant="outline" onClick={() => setStep(4)} className="gap-1"><ChevronLeft className="h-4 w-4" /> Voltar</Button>
-              <Button disabled={startBlock === null} onClick={() => setStep(6)} className="gap-1">
+              <Button disabled={!allStartsPicked} onClick={() => setStep(6)} className="gap-1">
                 Seus dados <ChevronRight className="h-4 w-4" />
               </Button>
             </Footer>
@@ -468,7 +484,7 @@ function BookPage() {
         {step === 6 && !submit.isSuccess && (
           <Card className="p-6">
             <h2 className="font-display text-2xl mb-1">Seus dados</h2>
-            <p className="text-sm text-muted-foreground mb-6">Para confirmar o agendamento.</p>
+            <p className="text-sm text-muted-foreground mb-6">Só o essencial para confirmar seu agendamento.</p>
             <div className="grid gap-4 max-w-md">
               <div>
                 <Label>Nome completo</Label>
@@ -478,16 +494,28 @@ function BookPage() {
                 <Label>Telefone (WhatsApp)</Label>
                 <Input value={client.phone} onChange={(e) => setClient({ ...client, phone: e.target.value })} placeholder="(11) 99999-9999" />
               </div>
-              <div>
-                <Label>E-mail (opcional)</Label>
-                <Input type="email" value={client.email} onChange={(e) => setClient({ ...client, email: e.target.value })} />
-              </div>
             </div>
-            <div className="mt-6 rounded-xl bg-muted/40 p-4 text-sm space-y-1">
-              <p className="font-medium mb-2">Resumo</p>
-              <p>Profissionais: <b>{selectedProNames}</b></p>
+            <div className="mt-6 rounded-xl bg-muted/40 p-4 text-sm space-y-2">
+              <p className="font-medium">Resumo</p>
               <p>Data: <b>{date && format(date, "dd 'de' MMMM 'de' yyyy", { locale: ptBR })}</b></p>
-              <p>Horário: <b>{startBlock !== null && blockToTime(startBlock)} – {startBlock !== null && blockToTime(startBlock + maxBlocks)}</b></p>
+              <div className="divide-y">
+                {proAssignments.map((entry) => {
+                  const pro = (profs.data ?? []).find((x: any) => x.id === entry.id);
+                  const start = startBlocks[entry.id];
+                  const Icon = roleIcon[entry.role];
+                  return (
+                    <div key={entry.id} className="py-2 flex items-center gap-2">
+                      <Icon className="h-4 w-4 text-primary shrink-0" />
+                      <span className="flex-1">
+                        <b>{roleLabel[entry.role]}</b> com {pro?.full_name}
+                      </span>
+                      <span className="tabular-nums">
+                        {start != null ? `${blockToTime(start)} – ${blockToTime(start + entry.blocks)}` : "—"}
+                      </span>
+                    </div>
+                  );
+                })}
+              </div>
               {activePromo && <p className="text-primary">Promoção: <b>{activePromo.name}</b></p>}
               <p>Total: <b className="text-primary">{formatBRL(finalTotal)}</b></p>
             </div>
@@ -511,10 +539,23 @@ function BookPage() {
               <Check className="h-8 w-8 text-primary" />
             </div>
             <h2 className="font-display text-3xl">Agendamento confirmado!</h2>
-            <p className="text-muted-foreground mt-2">
-              {selectedProNames} • {date && format(date, "dd/MM/yyyy")} • {startBlock !== null && blockToTime(startBlock)}
-            </p>
-            <p className="text-lg font-semibold text-primary mt-1">{formatBRL(finalTotal)}</p>
+            <p className="text-muted-foreground mt-2">{date && format(date, "dd/MM/yyyy")}</p>
+
+            <div className="mt-4 rounded-xl border p-4 max-w-md mx-auto text-left text-sm space-y-2">
+              {proAssignments.map((entry) => {
+                const pro = (profs.data ?? []).find((x: any) => x.id === entry.id);
+                const start = startBlocks[entry.id];
+                const Icon = roleIcon[entry.role];
+                return (
+                  <div key={entry.id} className="flex items-center gap-2">
+                    <Icon className="h-4 w-4 text-primary" />
+                    <span className="flex-1"><b>{roleLabel[entry.role]}</b> — {pro?.full_name}</span>
+                    <span className="tabular-nums">{start != null ? `${blockToTime(start)} – ${blockToTime(start + entry.blocks)}` : ""}</span>
+                  </div>
+                );
+              })}
+              <p className="pt-2 border-t text-primary font-semibold text-right">{formatBRL(finalTotal)}</p>
+            </div>
 
             <div className="mt-6 rounded-xl border border-primary/20 bg-primary/5 p-4 text-left text-sm max-w-md mx-auto space-y-2">
               <p className="font-medium text-center">Estamos te esperando no salão 💖</p>
@@ -530,8 +571,13 @@ function BookPage() {
                 </a>
               )}
               {settings.data?.phone && (
-                <a href={`tel:${settings.data.phone.replace(/\D/g, "")}`} className="flex items-center gap-2 hover:text-primary">
-                  <Phone className="h-4 w-4 text-primary" /> {settings.data.phone}
+                <a
+                  href={whatsappUrl(settings.data.phone, `Olá! Acabei de agendar no Vem Cá Menina para ${date ? format(date, "dd/MM") : ""}.`)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center gap-2 hover:text-primary"
+                >
+                  <MessageCircle className="h-4 w-4 text-primary" /> Falar no WhatsApp — {settings.data.phone}
                 </a>
               )}
             </div>
@@ -544,6 +590,98 @@ function BookPage() {
         )}
       </main>
       <SiteFooter />
+    </div>
+  );
+}
+
+function ProScheduleGrid({
+  icon: Icon, roleTitle, professionalName, blocks, busy, available, selected, otherSelections, onPick,
+}: {
+  icon: typeof Scissors;
+  roleTitle: string;
+  professionalName: string;
+  blocks: number;
+  busy: Set<number>;
+  available: Set<number>;
+  selected: number | null;
+  otherSelections: { start: number | null; blocks: number }[];
+  onPick: (b: number) => void;
+}) {
+  const all: number[] = [];
+  for (let b = OPEN_BLOCK; b < CLOSE_BLOCK; b++) all.push(b);
+
+  const conflictsOther = (s: number) => {
+    for (const o of otherSelections) {
+      if (o.start == null) continue;
+      const overlap = !(s + blocks <= o.start || s >= o.start + o.blocks);
+      if (overlap) return true;
+    }
+    return false;
+  };
+
+  return (
+    <div>
+      <div className="flex items-center gap-2 mb-2">
+        <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div>
+          <p className="text-sm font-medium leading-tight">{roleTitle} — {professionalName}</p>
+          <p className="text-xs text-muted-foreground">{blocksToDuration(blocks)} de atendimento</p>
+        </div>
+      </div>
+      <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
+        {all.map((b) => {
+          const isBusy = busy.has(b);
+          const isValidStart = available.has(b);
+          const isSelected = selected === b;
+          const isOccupiedBySelection = selected != null && b > selected && b < selected + blocks;
+          const conflict = isValidStart && !isSelected && conflictsOther(b);
+
+          let cls = "border-border/70 text-muted-foreground/70 bg-muted/40 cursor-not-allowed";
+          let disabled = true;
+          let title = "Indisponível";
+
+          if (isSelected) {
+            cls = "border-primary bg-primary text-primary-foreground shadow-soft";
+            disabled = false;
+            title = "Horário selecionado";
+          } else if (isOccupiedBySelection) {
+            cls = "border-primary/40 bg-primary/25 text-primary-foreground/90";
+            disabled = true;
+            title = "Bloco reservado pelo seu horário";
+          } else if (conflict) {
+            cls = "border-amber-400/50 bg-amber-100/40 text-amber-800/70 cursor-not-allowed line-through";
+            disabled = true;
+            title = "Conflita com o outro profissional";
+          } else if (isValidStart) {
+            cls = "border-primary/30 bg-background hover:border-primary hover:bg-primary/5 text-foreground";
+            disabled = false;
+            title = "Disponível";
+          } else if (isBusy) {
+            cls = "border-border/60 bg-muted/60 text-muted-foreground line-through cursor-not-allowed";
+            title = "Ocupado";
+          }
+
+          return (
+            <button
+              key={b}
+              type="button"
+              disabled={disabled}
+              onClick={() => onPick(b)}
+              title={title}
+              className={cn("py-1.5 rounded-md border text-xs font-medium transition tabular-nums", cls)}
+            >
+              {blockToTime(b)}
+            </button>
+          );
+        })}
+      </div>
+      {selected != null && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Início <b className="text-foreground">{blockToTime(selected)}</b> · Término <b className="text-foreground">{blockToTime(selected + blocks)}</b>
+        </p>
+      )}
     </div>
   );
 }
@@ -584,7 +722,7 @@ function CartSummary({
       </div>
       <span className="text-sm text-muted-foreground">{blocksToDuration(maxBlocks)}</span>
       <div className="text-right">
-        {promo && originalTotal > 0 && (
+        {promo && originalTotal > 0 && originalTotal !== finalTotal && (
           <span className="text-xs text-muted-foreground line-through mr-2">{formatBRL(originalTotal)}</span>
         )}
         <span className="text-lg font-semibold text-primary">{formatBRL(finalTotal)}</span>

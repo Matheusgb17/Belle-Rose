@@ -1,10 +1,11 @@
 import { Link } from "@tanstack/react-router";
-import { Menu, X, Instagram, Facebook, MapPin, Phone } from "lucide-react";
+import { Menu, X, Instagram, Facebook, MapPin, MessageCircle } from "lucide-react";
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { BrandLogo } from "@/components/logo";
 import { getSalonSettings } from "@/lib/booking.functions";
+import { whatsappUrl } from "@/lib/time";
 
 export function useSalonSettings() {
   return useQuery({
@@ -29,8 +30,8 @@ export function SiteHeader() {
                 <span className="flex items-center gap-1"><MapPin className="h-3 w-3 text-primary" />{s.address}</span>
               )}
               {s.phone && (
-                <a href={`tel:${s.phone.replace(/\D/g, "")}`} className="flex items-center gap-1 hover:text-foreground">
-                  <Phone className="h-3 w-3 text-primary" />{s.phone}
+                <a href={whatsappUrl(s.phone)} className="flex items-center gap-1 hover:text-foreground">
+                  <MessageCircle className="h-3 w-3 text-primary" />{s.phone}
                 </a>
               )}
             </div>
@@ -70,7 +71,7 @@ export function SiteHeader() {
           {s && (
             <div className="mt-2 pt-3 border-t space-y-2 text-sm text-muted-foreground">
               {s.address && <p className="flex items-center gap-2"><MapPin className="h-4 w-4 text-primary" />{s.address}</p>}
-              {s.phone && <a href={`tel:${s.phone.replace(/\D/g, "")}`} className="flex items-center gap-2"><Phone className="h-4 w-4 text-primary" />{s.phone}</a>}
+              {s.phone && <a href={whatsappUrl(s.phone)} className="flex items-center gap-2"><MessageCircle className="h-4 w-4 text-primary" />{s.phone}</a>}
               <div className="flex gap-3 pt-1">
                 {s.instagram_url && <a href={s.instagram_url} target="_blank" rel="noopener noreferrer"><Instagram className="h-5 w-5 text-primary" /></a>}
                 {s.facebook_url && <a href={s.facebook_url} target="_blank" rel="noopener noreferrer"><Facebook className="h-5 w-5 text-primary" /></a>}
@@ -112,8 +113,8 @@ export function SiteFooter() {
             </a>
           )}
           {s?.phone && (
-            <a href={`tel:${s.phone.replace(/\D/g, "")}`} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
-              <Phone className="h-4 w-4 text-primary" />{s.phone}
+            <a href={whatsappUrl(s.phone)} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
+              <MessageCircle className="h-4 w-4 text-primary" />{s.phone}
             </a>
           )}
         </div>
