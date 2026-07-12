@@ -1,13 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Calendar, Search, Sparkles, Scissors, Hand, Star, MapPin, Phone, Instagram, Facebook } from "lucide-react";
+import { Calendar, Search, Sparkles, Scissors, Hand, Star, MapPin, MessageCircle, Instagram, Facebook } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { SiteHeader, SiteFooter, useSalonSettings } from "@/components/site-chrome";
 import { listActivePromotions, listProcedures } from "@/lib/booking.functions";
-import { formatBRL, blocksToDuration } from "@/lib/time";
-import { BrandLogo } from "@/components/logo";
+import { formatBRL, blocksToDuration, whatsappUrl } from "@/lib/time";
 
 export const Route = createFileRoute("/")({
   head: () => ({
