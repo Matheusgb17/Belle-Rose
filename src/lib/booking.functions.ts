@@ -115,20 +115,74 @@ export const getAvailableSlots = createServerFn({ method: "POST" })
     return slots;
   });
 
-// ---------- Booking (multi-professional) ----------
+// Per-professional day schedule: returns busy + valid start blocks for each pro independently.
+export const getDaySchedules = createServerFn({ method: "POST" })
+  .inputValidator((input: { professionals: { id: string; blocks: number }[]; date: string }) =>
+    z
+      .object({
+        professionals: z
+          .array(z.object({ id: z.string().uuid(), blocks: z.number().int().min(1).max(20) }))
+          .min(1)
+          .max(3),
+        date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data }) => {
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const ids = data.professionals.map((p) => p.id);
+    const { data: appts, error } = await supabaseAdmin
+      .from("appointments")
+      .select("professional_id, start_block, total_blocks")
+      .in("professional_id", ids)
+      .eq("scheduled_date", data.date)
+      .eq("status", "confirmed");
+    if (error) throw new Error(error.message);
+
+    const busyByPro = new Map<string, Set<number>>();
+    ids.forEach((id) => busyByPro.set(id, new Set()));
+    (appts ?? []).forEach((a) => {
+      const set = busyByPro.get(a.professional_id)!;
+      for (let i = 0; i < a.total_blocks; i++) set.add(a.start_block + i);
+    });
+
+    const now = new Date();
+    const isToday = data.date === now.toISOString().slice(0, 10);
+    const nowBlock = now.getHours() * 2 + (now.getMinutes() >= 30 ? 1 : 0);
+
+    return data.professionals.map((p) => {
+      const busy = busyByPro.get(p.id)!;
+      const available: number[] = [];
+      for (let s = OPEN_BLOCK; s + p.blocks <= CLOSE_BLOCK; s++) {
+        if (isToday && s <= nowBlock) continue;
+        let ok = true;
+        for (let i = 0; i < p.blocks; i++) {
+          if (busy.has(s + i)) { ok = false; break; }
+        }
+        if (ok) available.push(s);
+      }
+      return {
+        id: p.id,
+        blocks: p.blocks,
+        busy: Array.from(busy).sort((a, b) => a - b),
+        available,
+      };
+    });
+  });
+
+// ---------- Booking (multi-professional, per-pro start time) ----------
 
 const bookingSchema = z.object({
   clientName: z.string().trim().min(2).max(120),
   clientPhone: z.string().trim().min(8).max(20),
-  clientEmail: z.string().email().max(160).optional().or(z.literal("")),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
-  startBlock: z.number().int().min(0).max(47),
   promotionId: z.string().uuid().optional(),
   professionals: z
     .array(
       z.object({
         professionalId: z.string().uuid(),
         procedureIds: z.array(z.string().uuid()).min(1).max(10),
+        startBlock: z.number().int().min(0).max(47),
       }),
     )
     .min(1)
@@ -158,17 +212,20 @@ export const createAppointment = createServerFn({ method: "POST" })
       });
       return {
         professionalId: entry.professionalId,
+        startBlock: entry.startBlock,
         items,
         totalBlocks: items.reduce((s, i) => s + i.blocks, 0),
         totalPrice: items.reduce((s, i) => s + i.price, 0),
       };
     });
 
-    const maxBlocks = Math.max(...perPro.map((p) => p.totalBlocks));
-    if (data.startBlock + maxBlocks > CLOSE_BLOCK || data.startBlock < OPEN_BLOCK)
-      throw new Error("Horário fora do expediente");
+    for (const p of perPro) {
+      if (p.startBlock < OPEN_BLOCK || p.startBlock + p.totalBlocks > CLOSE_BLOCK) {
+        throw new Error("Horário fora do expediente");
+      }
+    }
 
-    // Re-check availability
+    // Re-check availability per pro at its own startBlock
     const ids = perPro.map((p) => p.professionalId);
     const { data: appts } = await supabaseAdmin
       .from("appointments")
@@ -185,12 +242,13 @@ export const createAppointment = createServerFn({ method: "POST" })
     for (const p of perPro) {
       const busy = busyByPro.get(p.professionalId)!;
       for (let i = 0; i < p.totalBlocks; i++) {
-        if (busy.has(data.startBlock + i)) throw new Error("Horário não está mais disponível");
+        if (busy.has(p.startBlock + i)) throw new Error("Horário não está mais disponível");
       }
     }
 
-    // Promotion validation + price override
+    // Promotion validation: superset match (cart contains all promo procs)
     let promotion: any = null;
+    let promoProcIds = new Set<string>();
     if (data.promotionId) {
       const today = new Date().toISOString().slice(0, 10);
       const { data: promo } = await supabaseAdmin
@@ -201,12 +259,12 @@ export const createAppointment = createServerFn({ method: "POST" })
         .gte("end_date", today)
         .maybeSingle();
       if (promo) {
-        const promoProcIds = new Set((promo.promotion_procedures ?? []).map((pp: any) => pp.procedure_id));
-        // Only apply if user's cart contains exactly the promo procedures
-        const cartSet = new Set(allProcIds);
-        const sameSize = cartSet.size === promoProcIds.size;
-        const allMatch = sameSize && [...cartSet].every((id) => promoProcIds.has(id));
-        if (allMatch) promotion = promo;
+        const pIds = new Set<string>((promo.promotion_procedures ?? []).map((pp: any) => pp.procedure_id));
+        const allIncluded = [...pIds].every((id) => allProcIds.includes(id));
+        if (allIncluded) {
+          promotion = promo;
+          promoProcIds = pIds;
+        }
       }
     }
 
@@ -220,38 +278,46 @@ export const createAppointment = createServerFn({ method: "POST" })
       .maybeSingle();
     if (existing) {
       clientId = existing.id;
-      await supabaseAdmin
-        .from("clients")
-        .update({ name: data.clientName, email: data.clientEmail || null })
-        .eq("id", clientId);
+      await supabaseAdmin.from("clients").update({ name: data.clientName }).eq("id", clientId);
     } else {
       const { data: ins, error: cErr } = await supabaseAdmin
         .from("clients")
-        .insert({ name: data.clientName, phone, email: data.clientEmail || null })
+        .insert({ name: data.clientName, phone })
         .select("id")
         .single();
       if (cErr) throw new Error(cErr.message);
       clientId = ins.id;
     }
 
-    // If promo applies, distribute the promo price pro-rata by each pro's totalPrice share
+    // Distribute promo discount pro-rata across pros by each pro's share of promo-proc price
     const groupId = crypto.randomUUID();
-    const originalTotal = perPro.reduce((s, p) => s + p.totalPrice, 0);
-    const promoTotal = promotion ? Number(promotion.promo_price) : null;
+    const discount = promotion ? Number(promotion.original_price) - Number(promotion.promo_price) : 0;
+    const promoSumByPro = new Map<string, number>();
+    let totalPromoSum = 0;
+    if (promotion) {
+      for (const p of perPro) {
+        const s = p.items.filter((i) => promoProcIds.has(i.id)).reduce((a, i) => a + i.price, 0);
+        promoSumByPro.set(p.professionalId, s);
+        totalPromoSum += s;
+      }
+    }
 
     const createdIds: string[] = [];
+    let sumAppliedTotal = 0;
     for (const p of perPro) {
-      const priceToUse =
-        promoTotal !== null && originalTotal > 0
-          ? Math.round((promoTotal * (p.totalPrice / originalTotal)) * 100) / 100
-          : p.totalPrice;
+      let priceToUse = p.totalPrice;
+      if (promotion && totalPromoSum > 0) {
+        const proDiscount = discount * ((promoSumByPro.get(p.professionalId) ?? 0) / totalPromoSum);
+        priceToUse = Math.max(0, Math.round((p.totalPrice - proDiscount) * 100) / 100);
+      }
+      sumAppliedTotal += priceToUse;
       const { data: appt, error: aErr } = await supabaseAdmin
         .from("appointments")
         .insert({
           client_id: clientId,
           professional_id: p.professionalId,
           scheduled_date: data.date,
-          start_block: data.startBlock,
+          start_block: p.startBlock,
           total_blocks: p.totalBlocks,
           total_price: priceToUse,
           status: "confirmed",
@@ -276,8 +342,7 @@ export const createAppointment = createServerFn({ method: "POST" })
     return {
       ids: createdIds,
       groupId,
-      totalPrice: promoTotal ?? originalTotal,
-      totalBlocks: maxBlocks,
+      totalPrice: sumAppliedTotal,
       promotionApplied: !!promotion,
     };
   });
