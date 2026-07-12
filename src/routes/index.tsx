@@ -35,32 +35,29 @@ function HomePage() {
         <div className="absolute -top-32 -right-32 h-96 w-96 rounded-full bg-primary/15 blur-3xl" />
         <div className="absolute -bottom-24 -left-24 h-80 w-80 rounded-full bg-accent/30 blur-3xl" />
         <div className="relative mx-auto max-w-6xl px-4 py-16 md:py-24">
-          <div className="flex flex-col md:flex-row items-center gap-8">
-            <BrandLogo className="h-32 w-32 md:h-40 md:w-40 shrink-0" />
-            <div>
-              <Badge variant="secondary" className="mb-4 px-4 py-1 text-xs tracking-widest uppercase">
-                <Sparkles className="h-3 w-3 mr-1 inline" /> Bragança Paulista • SP
-              </Badge>
-              <h1 className="font-display text-5xl md:text-7xl font-medium leading-[1.05]">
-                Vem <span className="italic text-primary">Cá</span> Menina
-              </h1>
-              <p className="mt-4 max-w-xl text-lg text-muted-foreground">
-                {s?.tagline || "Seu salão de beleza em Bragança Paulista"}. Agende online com nossas cabeleireiras e manicures — cabelo, unhas e cuidado, tudo no mesmo lugar.
-              </p>
-              <div className="mt-8 flex flex-wrap gap-3">
-                <Link to="/agendar">
-                  <Button size="lg" className="rounded-full h-12 px-8 shadow-elegant gap-2">
-                    <Calendar className="h-4 w-4" />
-                    Agendar horário
-                  </Button>
-                </Link>
-                <Link to="/meus-agendamentos">
-                  <Button size="lg" variant="outline" className="rounded-full h-12 px-8 gap-2">
-                    <Search className="h-4 w-4" />
-                    Consultar / cancelar
-                  </Button>
-                </Link>
-              </div>
+          <div className="max-w-3xl">
+            <Badge variant="secondary" className="mb-4 px-4 py-1 text-xs tracking-widest uppercase">
+              <Sparkles className="h-3 w-3 mr-1 inline" /> Bragança Paulista • SP
+            </Badge>
+            <h1 className="font-display text-5xl md:text-7xl font-medium leading-[1.05]">
+              Vem <span className="italic text-primary">Cá</span> Menina
+            </h1>
+            <p className="mt-4 max-w-xl text-lg text-muted-foreground">
+              {s?.tagline || "Seu salão de beleza em Bragança Paulista"}. Agende online com nossas cabeleireiras e manicures — cabelo, unhas e cuidado, tudo no mesmo lugar.
+            </p>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link to="/agendar">
+                <Button size="lg" className="rounded-full h-12 px-8 shadow-elegant gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Agendar horário
+                </Button>
+              </Link>
+              <Link to="/meus-agendamentos">
+                <Button size="lg" variant="outline" className="rounded-full h-12 px-8 gap-2">
+                  <Search className="h-4 w-4" />
+                  Consultar / cancelar
+                </Button>
+              </Link>
             </div>
           </div>
         </div>
