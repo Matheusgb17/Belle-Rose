@@ -89,12 +89,12 @@ function HomePage() {
             </div>
             <div className="flex items-start gap-3">
               <div className="h-11 w-11 rounded-full bg-primary/10 flex items-center justify-center text-primary shrink-0">
-                <Phone className="h-5 w-5" />
+                <MessageCircle className="h-5 w-5" />
               </div>
               <div>
-                <p className="text-xs uppercase tracking-widest text-muted-foreground">Telefone</p>
+                <p className="text-xs uppercase tracking-widest text-muted-foreground">WhatsApp</p>
                 {s?.phone ? (
-                  <a href={`tel:${s.phone.replace(/\D/g, "")}`} className="font-medium hover:text-primary block mt-0.5">{s.phone}</a>
+                  <a href={whatsappUrl(s.phone, "Olá! Vim pelo site do Vem Cá Menina.")} target="_blank" rel="noopener noreferrer" className="font-medium hover:text-primary block mt-0.5">{s.phone}</a>
                 ) : (
                   <p className="text-sm text-muted-foreground mt-0.5">Configure no painel.</p>
                 )}
