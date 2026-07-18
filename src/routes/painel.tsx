@@ -90,7 +90,8 @@ function PanelContent() {
         <Tabs defaultValue="dash">
           <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="dash"><LayoutDashboard className="h-4 w-4 mr-1" />Dashboard</TabsTrigger>
-            <TabsTrigger value="appts"><Calendar className="h-4 w-4 mr-1" />Agendamentos</TabsTrigger>
+            <TabsTrigger value="appts"><CalendarIcon className="h-4 w-4 mr-1" />Agendamentos</TabsTrigger>
+            <TabsTrigger value="myagenda"><Clock className="h-4 w-4 mr-1" />Minha agenda</TabsTrigger>
             <TabsTrigger value="procs"><Scissors className="h-4 w-4 mr-1" />Procedimentos</TabsTrigger>
             <TabsTrigger value="promos"><Tag className="h-4 w-4 mr-1" />Promoções</TabsTrigger>
             {isAdmin && <TabsTrigger value="profs"><Users className="h-4 w-4 mr-1" />Profissionais</TabsTrigger>}
@@ -99,6 +100,7 @@ function PanelContent() {
 
           <TabsContent value="dash" className="mt-6"><DashboardTab /></TabsContent>
           <TabsContent value="appts" className="mt-6"><AppointmentsTab isAdmin={!!isAdmin} /></TabsContent>
+          <TabsContent value="myagenda" className="mt-6"><MyScheduleTab /></TabsContent>
           <TabsContent value="procs" className="mt-6"><ProceduresTab /></TabsContent>
           <TabsContent value="promos" className="mt-6"><PromotionsTab /></TabsContent>
           {isAdmin && <TabsContent value="profs" className="mt-6"><ProfessionalsTab /></TabsContent>}
