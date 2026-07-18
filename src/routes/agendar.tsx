@@ -500,9 +500,11 @@ function BookPage() {
                       roleTitle={roleLabel[entry.role]}
                       professionalName={pro?.full_name ?? ""}
                       blocks={entry.blocks}
+                      dayOff={!!schedule.dayOff}
                       busy={new Set<number>(schedule.busy)}
                       available={new Set<number>(schedule.available)}
                       selected={selected}
+                      requireAdjacency={requireAdjacency}
                       otherSelections={otherEntries.map((o) => ({
                         start: startBlocks[o.id] ?? null,
                         blocks: o.blocks,
