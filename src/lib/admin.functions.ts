@@ -30,6 +30,11 @@ export const upsertProcedure = createServerFn({ method: "POST" })
       description?: string;
       price: number;
       duration_blocks: number;
+      by_length?: boolean;
+      price_short?: number | null;
+      price_medium?: number | null;
+      price_long?: number | null;
+      price_xlong?: number | null;
     }) =>
       z
         .object({
@@ -39,32 +44,34 @@ export const upsertProcedure = createServerFn({ method: "POST" })
           description: z.string().max(500).optional(),
           price: z.number().min(0).max(99999),
           duration_blocks: z.number().int().min(1).max(20),
+          by_length: z.boolean().optional(),
+          price_short: z.number().min(0).nullable().optional(),
+          price_medium: z.number().min(0).nullable().optional(),
+          price_long: z.number().min(0).nullable().optional(),
+          price_xlong: z.number().min(0).nullable().optional(),
         })
         .parse(input),
   )
   .handler(async ({ data, context }) => {
     await assertStaff(context);
     const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const payload = {
+      name: data.name,
+      category: data.category,
+      description: data.description ?? null,
+      price: data.price,
+      duration_blocks: data.duration_blocks,
+      by_length: data.by_length ?? false,
+      price_short: data.price_short ?? null,
+      price_medium: data.price_medium ?? null,
+      price_long: data.price_long ?? null,
+      price_xlong: data.price_xlong ?? null,
+    };
     if (data.id) {
-      const { error } = await supabaseAdmin
-        .from("procedures")
-        .update({
-          name: data.name,
-          category: data.category,
-          description: data.description ?? null,
-          price: data.price,
-          duration_blocks: data.duration_blocks,
-        })
-        .eq("id", data.id);
+      const { error } = await supabaseAdmin.from("procedures").update(payload).eq("id", data.id);
       if (error) throw new Error(error.message);
     } else {
-      const { error } = await supabaseAdmin.from("procedures").insert({
-        name: data.name,
-        category: data.category,
-        description: data.description ?? null,
-        price: data.price,
-        duration_blocks: data.duration_blocks,
-      });
+      const { error } = await supabaseAdmin.from("procedures").insert(payload);
       if (error) throw new Error(error.message);
     }
     return { ok: true };
