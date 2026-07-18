@@ -639,7 +639,7 @@ function BookPage() {
 }
 
 function ProScheduleGrid({
-  icon: Icon, roleTitle, professionalName, blocks, busy, available, selected, otherSelections, onPick,
+  icon: Icon, roleTitle, professionalName, blocks, busy, available, selected, otherSelections, onPick, dayOff, requireAdjacency,
 }: {
   icon: typeof Scissors;
   roleTitle: string;
@@ -650,6 +650,8 @@ function ProScheduleGrid({
   selected: number | null;
   otherSelections: { start: number | null; blocks: number }[];
   onPick: (b: number) => void;
+  dayOff?: boolean;
+  requireAdjacency?: boolean;
 }) {
   const all: number[] = [];
   for (let b = OPEN_BLOCK; b < CLOSE_BLOCK; b++) all.push(b);
@@ -662,6 +664,31 @@ function ProScheduleGrid({
     }
     return false;
   };
+  const nonAdjacent = (s: number) => {
+    if (!requireAdjacency) return false;
+    for (const o of otherSelections) {
+      if (o.start == null) continue;
+      const adj = s + blocks === o.start || s === o.start + o.blocks;
+      if (!adj) return true;
+    }
+    return false;
+  };
+
+  if (dayOff) {
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+            <Icon className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-medium leading-tight">{roleTitle} — {professionalName}</p>
+            <p className="text-xs text-destructive">Profissional está de folga nesta data.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -671,7 +698,10 @@ function ProScheduleGrid({
         </div>
         <div>
           <p className="text-sm font-medium leading-tight">{roleTitle} — {professionalName}</p>
-          <p className="text-xs text-muted-foreground">{blocksToDuration(blocks)} de atendimento</p>
+          <p className="text-xs text-muted-foreground">
+            {blocksToDuration(blocks)} de atendimento
+            {requireAdjacency && " · precisa ser adjacente ao outro serviço"}
+          </p>
         </div>
       </div>
       <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
@@ -681,6 +711,7 @@ function ProScheduleGrid({
           const isSelected = selected === b;
           const isOccupiedBySelection = selected != null && b > selected && b < selected + blocks;
           const conflict = isValidStart && !isSelected && conflictsOther(b);
+          const adjFail = isValidStart && !isSelected && !conflict && nonAdjacent(b);
 
           let cls = "border-border/70 text-muted-foreground/70 bg-muted/40 cursor-not-allowed";
           let disabled = true;
@@ -698,6 +729,10 @@ function ProScheduleGrid({
             cls = "border-amber-400/50 bg-amber-100/40 text-amber-800/70 cursor-not-allowed line-through";
             disabled = true;
             title = "Conflita com o outro profissional";
+          } else if (adjFail) {
+            cls = "border-border/60 bg-muted/40 text-muted-foreground/60 cursor-not-allowed";
+            disabled = true;
+            title = "Precisa ser imediatamente antes ou depois do outro serviço";
           } else if (isValidStart) {
             cls = "border-primary/30 bg-background hover:border-primary hover:bg-primary/5 text-foreground";
             disabled = false;
