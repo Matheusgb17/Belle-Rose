@@ -17,7 +17,7 @@ export const Route = createFileRoute("/login")({
 });
 
 function LoginPage() {
-  const [username, setUsername] = useState("adm");
+  const [username, setUsername] = useState("admin");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -29,7 +29,7 @@ function LoginPage() {
     setLoading(true);
     try {
       // Bootstrap admin if needed
-      if (username === "adm") {
+      if (username === "admin") {
         await ensureFn({});
       }
       const { email } = await resolveFn({ data: { username } });
@@ -68,9 +68,6 @@ function LoginPage() {
             {loading ? "Entrando…" : "Entrar"}
           </Button>
         </form>
-        <p className="text-xs text-muted-foreground text-center mt-6">
-          Administrador padrão: <code className="bg-muted px-1 rounded">adm</code> / <code className="bg-muted px-1 rounded">123</code>
-        </p>
       </Card>
     </div>
   );
