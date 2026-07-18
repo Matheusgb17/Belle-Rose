@@ -61,6 +61,7 @@ function BookPage() {
   });
   const [cart, setCart] = useState<string[]>([]);
   const [appliedPromoId, setAppliedPromoId] = useState<string | null>(null);
+  const [hairLength, setHairLength] = useState<"short" | "medium" | "long" | "xlong">("medium");
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [startBlocks, setStartBlocks] = useState<Record<string, number | null>>({});
   const [client, setClient] = useState({ name: "", phone: "" });
@@ -77,6 +78,15 @@ function BookPage() {
     if (!procs.data) return [];
     return procs.data.filter((p: any) => activeCategories.includes(p.category as any));
   }, [procs.data, activeCategories]);
+
+  const priceOf = (p: any) => {
+    if (p.category === "cabelo" && p.by_length) {
+      const key = { short: "price_short", medium: "price_medium", long: "price_long", xlong: "price_xlong" }[hairLength] as string;
+      const v = p[key];
+      if (v != null) return Number(v);
+    }
+    return Number(p.price);
+  };
 
   const cartProcs = useMemo(
     () => (procs.data ?? []).filter((p: any) => cart.includes(p.id)),
@@ -105,10 +115,12 @@ function BookPage() {
     () => new Set<string>(activePromo ? (activePromo.promotion_procedures ?? []).map((pp: any) => pp.procedure_id) : []),
     [activePromo],
   );
-  const originalTotal = cartProcs.reduce((s, p: any) => s + Number(p.price), 0);
-  const extraProcsTotal = cartProcs.filter((p: any) => !promoProcIds.has(p.id)).reduce((s, p: any) => s + Number(p.price), 0);
+  const originalTotal = cartProcs.reduce((s, p: any) => s + priceOf(p), 0);
+  const extraProcsTotal = cartProcs.filter((p: any) => !promoProcIds.has(p.id)).reduce((s, p: any) => s + priceOf(p), 0);
   const finalTotal = activePromo ? Number(activePromo.promo_price) + extraProcsTotal : originalTotal;
   const maxBlocks = proAssignments.length ? Math.max(...proAssignments.map((p) => p.blocks)) : 0;
+  const requireAdjacency = proAssignments.some((p) => p.role === "hairdresser") && proAssignments.some((p) => p.role === "manicurist");
+  const hasHair = activeCategories.includes("cabelo");
 
   const dateStr = date ? format(date, "yyyy-MM-dd") : null;
 
