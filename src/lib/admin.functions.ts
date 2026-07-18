@@ -449,3 +449,108 @@ export const updateSalonSettings = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
+// ---------- Professional schedule & days off (self-service) ----------
+
+export const getMySchedule = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertStaff(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { data } = await supabaseAdmin
+      .from("professional_schedules")
+      .select("*")
+      .eq("user_id", context.userId)
+      .maybeSingle();
+    return data;
+  });
+
+export const updateMySchedule = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator(
+    (input: {
+      start_block: number;
+      end_block: number;
+      lunch_start_block: number | null;
+      lunch_end_block: number | null;
+    }) =>
+      z
+        .object({
+          start_block: z.number().int().min(0).max(47),
+          end_block: z.number().int().min(1).max(48),
+          lunch_start_block: z.number().int().min(0).max(47).nullable(),
+          lunch_end_block: z.number().int().min(1).max(48).nullable(),
+        })
+        .refine((v) => v.end_block > v.start_block, { message: "Horário final deve ser após o inicial" })
+        .refine(
+          (v) =>
+            (v.lunch_start_block == null && v.lunch_end_block == null) ||
+            (v.lunch_start_block != null &&
+              v.lunch_end_block != null &&
+              v.lunch_end_block > v.lunch_start_block &&
+              v.lunch_start_block >= v.start_block &&
+              v.lunch_end_block <= v.end_block),
+          { message: "Almoço deve estar dentro do expediente" },
+        )
+        .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertStaff(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("professional_schedules")
+      .upsert({ user_id: context.userId, ...data, updated_at: new Date().toISOString() });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const listMyDaysOff = createServerFn({ method: "GET" })
+  .middleware([requireSupabaseAuth])
+  .handler(async ({ context }) => {
+    await assertStaff(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const today = new Date().toISOString().slice(0, 10);
+    const { data } = await supabaseAdmin
+      .from("professional_days_off")
+      .select("*")
+      .eq("user_id", context.userId)
+      .gte("day", today)
+      .order("day");
+    return data ?? [];
+  });
+
+export const addMyDayOff = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { day: string; reason?: string }) =>
+    z
+      .object({
+        day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+        reason: z.string().max(200).optional(),
+      })
+      .parse(input),
+  )
+  .handler(async ({ data, context }) => {
+    await assertStaff(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("professional_days_off")
+      .upsert({ user_id: context.userId, day: data.day, reason: data.reason ?? null });
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+export const removeMyDayOff = createServerFn({ method: "POST" })
+  .middleware([requireSupabaseAuth])
+  .inputValidator((input: { id: string }) => z.object({ id: z.string().uuid() }).parse(input))
+  .handler(async ({ data, context }) => {
+    await assertStaff(context);
+    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { error } = await supabaseAdmin
+      .from("professional_days_off")
+      .delete()
+      .eq("id", data.id)
+      .eq("user_id", context.userId);
+    if (error) throw new Error(error.message);
+    return { ok: true };
+  });
+
+
