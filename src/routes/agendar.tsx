@@ -147,8 +147,10 @@ function BookPage() {
           clientPhone: client.phone,
           date: dateStr!,
           promotionId: appliedPromoId ?? undefined,
+          hairLength: hasHair ? hairLength : undefined,
           professionals: proAssignments.map((p) => ({
             professionalId: p.id,
+            role: p.role,
             procedureIds: p.procs.map((x: any) => x.id),
             startBlock: startBlocks[p.id]!,
           })),
