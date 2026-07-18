@@ -283,7 +283,7 @@ function ProceduresTab() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing?.id ? "Editar" : "Novo"} procedimento</DialogTitle></DialogHeader>
           {editing && (
             <div className="space-y-3">
@@ -301,9 +301,36 @@ function ProceduresTab() {
               </div>
               <div><Label>Descrição</Label><Textarea value={editing.description ?? ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Preço (R$)</Label><Input type="number" step="0.01" value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} /></div>
+                <div><Label>Preço padrão (R$)</Label><Input type="number" step="0.01" value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} /></div>
                 <div><Label>Duração (blocos de 30min)</Label><Input type="number" min={1} max={20} value={editing.duration_blocks} onChange={(e) => setEditing({ ...editing, duration_blocks: Number(e.target.value) })} /></div>
               </div>
+
+              {editing.category === "cabelo" && (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Preço varia por tamanho do cabelo</p>
+                      <p className="text-xs text-muted-foreground">A cliente escolhe o tamanho no agendamento.</p>
+                    </div>
+                    <Switch checked={!!editing.by_length} onCheckedChange={(v) => setEditing({ ...editing, by_length: v })} />
+                  </div>
+                  {editing.by_length && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {([
+                        { k: "price_short", label: "Curto" },
+                        { k: "price_medium", label: "Médio" },
+                        { k: "price_long", label: "Longo" },
+                        { k: "price_xlong", label: "Superlongo" },
+                      ] as const).map((f) => (
+                        <div key={f.k}>
+                          <Label>{f.label} (R$)</Label>
+                          <Input type="number" step="0.01" value={editing[f.k] ?? ""} onChange={(e) => setEditing({ ...editing, [f.k]: e.target.value === "" ? null : Number(e.target.value) })} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -311,6 +338,11 @@ function ProceduresTab() {
               id: editing.id, name: editing.name, category: editing.category,
               description: editing.description || undefined,
               price: Number(editing.price), duration_blocks: Number(editing.duration_blocks),
+              by_length: editing.category === "cabelo" ? !!editing.by_length : false,
+              price_short: editing.price_short ?? null,
+              price_medium: editing.price_medium ?? null,
+              price_long: editing.price_long ?? null,
+              price_xlong: editing.price_xlong ?? null,
             })} disabled={save.isPending}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
