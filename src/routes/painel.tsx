@@ -3,10 +3,11 @@ import { useEffect, useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  LogOut, Calendar, Users, Scissors, Tag, LayoutDashboard, Plus, Trash2, Edit, X, Settings,
+  LogOut, Calendar as CalendarIcon, Users, Scissors, Tag, LayoutDashboard, Plus, Trash2, Edit, X, Settings, Clock, CalendarOff,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 
@@ -19,6 +20,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Calendar as UICalendar } from "@/components/ui/calendar";
 import { supabase } from "@/integrations/supabase/client";
 import {
   meRoles, dashboardStats, listAppointments, cancelAppointmentStaff,
@@ -26,9 +29,10 @@ import {
   listAllProfessionals, createProfessional, toggleProfessional, deleteProfessional,
   upsertPromotion, deletePromotion, listAllPromotions,
   updateSalonSettings,
+  getMySchedule, updateMySchedule, listMyDaysOff, addMyDayOff, removeMyDayOff,
 } from "@/lib/admin.functions";
 import { listProcedures, getSalonSettings } from "@/lib/booking.functions";
-import { blockToTime, formatBRL, blocksToDuration } from "@/lib/time";
+import { blockToTime, formatBRL, blocksToDuration, OPEN_BLOCK, CLOSE_BLOCK } from "@/lib/time";
 import { BrandLogo } from "@/components/logo";
 
 export const Route = createFileRoute("/painel")({
@@ -87,7 +91,8 @@ function PanelContent() {
         <Tabs defaultValue="dash">
           <TabsList className="flex-wrap h-auto">
             <TabsTrigger value="dash"><LayoutDashboard className="h-4 w-4 mr-1" />Dashboard</TabsTrigger>
-            <TabsTrigger value="appts"><Calendar className="h-4 w-4 mr-1" />Agendamentos</TabsTrigger>
+            <TabsTrigger value="appts"><CalendarIcon className="h-4 w-4 mr-1" />Agendamentos</TabsTrigger>
+            <TabsTrigger value="myagenda"><Clock className="h-4 w-4 mr-1" />Minha agenda</TabsTrigger>
             <TabsTrigger value="procs"><Scissors className="h-4 w-4 mr-1" />Procedimentos</TabsTrigger>
             <TabsTrigger value="promos"><Tag className="h-4 w-4 mr-1" />Promoções</TabsTrigger>
             {isAdmin && <TabsTrigger value="profs"><Users className="h-4 w-4 mr-1" />Profissionais</TabsTrigger>}
@@ -96,6 +101,7 @@ function PanelContent() {
 
           <TabsContent value="dash" className="mt-6"><DashboardTab /></TabsContent>
           <TabsContent value="appts" className="mt-6"><AppointmentsTab isAdmin={!!isAdmin} /></TabsContent>
+          <TabsContent value="myagenda" className="mt-6"><MyScheduleTab /></TabsContent>
           <TabsContent value="procs" className="mt-6"><ProceduresTab /></TabsContent>
           <TabsContent value="promos" className="mt-6"><PromotionsTab /></TabsContent>
           {isAdmin && <TabsContent value="profs" className="mt-6"><ProfessionalsTab /></TabsContent>}
@@ -278,7 +284,7 @@ function ProceduresTab() {
       </div>
 
       <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent>
+        <DialogContent className="max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editing?.id ? "Editar" : "Novo"} procedimento</DialogTitle></DialogHeader>
           {editing && (
             <div className="space-y-3">
@@ -296,9 +302,36 @@ function ProceduresTab() {
               </div>
               <div><Label>Descrição</Label><Textarea value={editing.description ?? ""} onChange={(e) => setEditing({ ...editing, description: e.target.value })} /></div>
               <div className="grid grid-cols-2 gap-3">
-                <div><Label>Preço (R$)</Label><Input type="number" step="0.01" value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} /></div>
+                <div><Label>Preço padrão (R$)</Label><Input type="number" step="0.01" value={editing.price} onChange={(e) => setEditing({ ...editing, price: Number(e.target.value) })} /></div>
                 <div><Label>Duração (blocos de 30min)</Label><Input type="number" min={1} max={20} value={editing.duration_blocks} onChange={(e) => setEditing({ ...editing, duration_blocks: Number(e.target.value) })} /></div>
               </div>
+
+              {editing.category === "cabelo" && (
+                <div className="rounded-xl border border-primary/30 bg-primary/5 p-3 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium">Preço varia por tamanho do cabelo</p>
+                      <p className="text-xs text-muted-foreground">A cliente escolhe o tamanho no agendamento.</p>
+                    </div>
+                    <Switch checked={!!editing.by_length} onCheckedChange={(v) => setEditing({ ...editing, by_length: v })} />
+                  </div>
+                  {editing.by_length && (
+                    <div className="grid grid-cols-2 gap-3">
+                      {([
+                        { k: "price_short", label: "Curto" },
+                        { k: "price_medium", label: "Médio" },
+                        { k: "price_long", label: "Longo" },
+                        { k: "price_xlong", label: "Superlongo" },
+                      ] as const).map((f) => (
+                        <div key={f.k}>
+                          <Label>{f.label} (R$)</Label>
+                          <Input type="number" step="0.01" value={editing[f.k] ?? ""} onChange={(e) => setEditing({ ...editing, [f.k]: e.target.value === "" ? null : Number(e.target.value) })} />
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           )}
           <DialogFooter>
@@ -306,6 +339,11 @@ function ProceduresTab() {
               id: editing.id, name: editing.name, category: editing.category,
               description: editing.description || undefined,
               price: Number(editing.price), duration_blocks: Number(editing.duration_blocks),
+              by_length: editing.category === "cabelo" ? !!editing.by_length : false,
+              price_short: editing.price_short ?? null,
+              price_medium: editing.price_medium ?? null,
+              price_long: editing.price_long ?? null,
+              price_xlong: editing.price_xlong ?? null,
             })} disabled={save.isPending}>Salvar</Button>
           </DialogFooter>
         </DialogContent>
@@ -570,6 +608,136 @@ function SettingsTab() {
           <Button onClick={() => save.mutate(form)} disabled={save.isPending}>
             {save.isPending ? "Salvando…" : "Salvar configurações"}
           </Button>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+function MyScheduleTab() {
+  const qc = useQueryClient();
+  const schedFn = useServerFn(getMySchedule);
+  const updateFn = useServerFn(updateMySchedule);
+  const listDaysFn = useServerFn(listMyDaysOff);
+  const addDayFn = useServerFn(addMyDayOff);
+  const removeDayFn = useServerFn(removeMyDayOff);
+
+  const schedule = useQuery({ queryKey: ["my-schedule"], queryFn: () => schedFn({}) });
+  const daysOff = useQuery({ queryKey: ["my-days-off"], queryFn: () => listDaysFn({}) });
+
+  const [form, setForm] = useState<{ start_block: number; end_block: number; lunch_start_block: number | null; lunch_end_block: number | null }>({
+    start_block: OPEN_BLOCK, end_block: CLOSE_BLOCK, lunch_start_block: 24, lunch_end_block: 26,
+  });
+  const [hasLunch, setHasLunch] = useState(true);
+  const [pickDate, setPickDate] = useState<Date | undefined>(undefined);
+
+  useEffect(() => {
+    if (schedule.data) {
+      setForm({
+        start_block: schedule.data.start_block ?? OPEN_BLOCK,
+        end_block: schedule.data.end_block ?? CLOSE_BLOCK,
+        lunch_start_block: schedule.data.lunch_start_block,
+        lunch_end_block: schedule.data.lunch_end_block,
+      });
+      setHasLunch(schedule.data.lunch_start_block != null);
+    }
+  }, [schedule.data]);
+
+  const save = useMutation({
+    mutationFn: () => updateFn({ data: {
+      start_block: form.start_block,
+      end_block: form.end_block,
+      lunch_start_block: hasLunch ? form.lunch_start_block : null,
+      lunch_end_block: hasLunch ? form.lunch_end_block : null,
+    } }),
+    onSuccess: () => { toast.success("Agenda atualizada"); qc.invalidateQueries({ queryKey: ["my-schedule"] }); },
+    onError: (e: any) => toast.error(e?.message ?? "Erro"),
+  });
+
+  const addDay = useMutation({
+    mutationFn: (day: string) => addDayFn({ data: { day } }),
+    onSuccess: () => { toast.success("Dia de folga registrado"); qc.invalidateQueries({ queryKey: ["my-days-off"] }); setPickDate(undefined); },
+    onError: (e: any) => toast.error(e?.message ?? "Erro"),
+  });
+
+  const removeDay = useMutation({
+    mutationFn: (id: string) => removeDayFn({ data: { id } }),
+    onSuccess: () => { toast.success("Folga removida"); qc.invalidateQueries({ queryKey: ["my-days-off"] }); },
+  });
+
+  const blockOpts: number[] = [];
+  for (let b = 0; b <= 48; b++) blockOpts.push(b);
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      <Card className="p-6">
+        <h3 className="font-display text-xl mb-1 flex items-center gap-2"><Clock className="h-5 w-5 text-primary" />Meu horário de trabalho</h3>
+        <p className="text-sm text-muted-foreground mb-4">Defina início, fim e almoço. Só os horários dentro dessa faixa serão oferecidos às clientes.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Início</Label>
+            <Select value={String(form.start_block)} onValueChange={(v) => setForm({ ...form, start_block: Number(v) })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{blockOpts.slice(0, 48).map((b) => <SelectItem key={b} value={String(b)}>{blockToTime(b)}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Fim</Label>
+            <Select value={String(form.end_block)} onValueChange={(v) => setForm({ ...form, end_block: Number(v) })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{blockOpts.slice(1).map((b) => <SelectItem key={b} value={String(b)}>{blockToTime(b)}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="mt-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Tem intervalo de almoço</p>
+            <p className="text-xs text-muted-foreground">Bloqueia esse período na agenda.</p>
+          </div>
+          <Switch checked={hasLunch} onCheckedChange={setHasLunch} />
+        </div>
+        {hasLunch && (
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <Label>Almoço — início</Label>
+              <Select value={String(form.lunch_start_block ?? 24)} onValueChange={(v) => setForm({ ...form, lunch_start_block: Number(v) })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{blockOpts.slice(0, 48).map((b) => <SelectItem key={b} value={String(b)}>{blockToTime(b)}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Almoço — fim</Label>
+              <Select value={String(form.lunch_end_block ?? 26)} onValueChange={(v) => setForm({ ...form, lunch_end_block: Number(v) })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{blockOpts.slice(1).map((b) => <SelectItem key={b} value={String(b)}>{blockToTime(b)}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+        <Button onClick={() => save.mutate()} disabled={save.isPending} className="mt-4 w-full">Salvar horários</Button>
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="font-display text-xl mb-1 flex items-center gap-2"><CalendarOff className="h-5 w-5 text-primary" />Dias de folga</h3>
+        <p className="text-sm text-muted-foreground mb-3">Marque dias em que você não vai atender. As clientes não poderão agendar nesses dias. Agendamentos já feitos permanecem — entre em contato com a cliente para cancelar individualmente.</p>
+        <UICalendar
+          mode="single"
+          selected={pickDate}
+          onSelect={setPickDate}
+          className={cn("p-3 pointer-events-auto rounded-md border")}
+          disabled={(d) => d < new Date(new Date().toDateString())}
+        />
+        <Button className="mt-3 w-full" disabled={!pickDate || addDay.isPending} onClick={() => pickDate && addDay.mutate(pickDate.toISOString().slice(0, 10))}>
+          Adicionar folga
+        </Button>
+        <div className="mt-4 space-y-2">
+          {(daysOff.data ?? []).map((d: any) => (
+            <div key={d.id} className="flex items-center justify-between rounded-lg border p-2">
+              <p className="text-sm">{new Date(d.day + "T00:00").toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}</p>
+              <Button size="sm" variant="ghost" onClick={() => removeDay.mutate(d.id)}><Trash2 className="h-4 w-4" /></Button>
+            </div>
+          ))}
+          {(daysOff.data ?? []).length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Nenhuma folga futura registrada.</p>}
         </div>
       </Card>
     </div>

@@ -131,12 +131,10 @@ function HomePage() {
       <section className="mx-auto max-w-6xl px-4 py-16">
         <h2 className="font-display text-3xl md:text-4xl mb-2">Nossos serviços</h2>
         <p className="text-muted-foreground mb-8">Cabelo, unhas e muito mais — tudo com hora marcada.</p>
-        <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid sm:grid-cols-2 gap-4">
           {[
             { icon: Scissors, label: "Cabelo", cat: "cabelo" },
             { icon: Hand, label: "Unhas", cat: "unhas" },
-            { icon: Sparkles, label: "Estética", cat: "estetica" },
-            { icon: Star, label: "Outros", cat: "outros" },
           ].map((c) => {
             const count = (procs.data ?? []).filter((p: any) => p.category === c.cat).length;
             return (

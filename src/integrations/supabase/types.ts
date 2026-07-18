@@ -149,6 +149,7 @@ export type Database = {
       }
       procedures: {
         Row: {
+          by_length: boolean
           category: Database["public"]["Enums"]["procedure_category"]
           created_at: string
           description: string | null
@@ -157,8 +158,13 @@ export type Database = {
           is_active: boolean
           name: string
           price: number
+          price_long: number | null
+          price_medium: number | null
+          price_short: number | null
+          price_xlong: number | null
         }
         Insert: {
+          by_length?: boolean
           category?: Database["public"]["Enums"]["procedure_category"]
           created_at?: string
           description?: string | null
@@ -167,8 +173,13 @@ export type Database = {
           is_active?: boolean
           name: string
           price: number
+          price_long?: number | null
+          price_medium?: number | null
+          price_short?: number | null
+          price_xlong?: number | null
         }
         Update: {
+          by_length?: boolean
           category?: Database["public"]["Enums"]["procedure_category"]
           created_at?: string
           description?: string | null
@@ -177,6 +188,61 @@ export type Database = {
           is_active?: boolean
           name?: string
           price?: number
+          price_long?: number | null
+          price_medium?: number | null
+          price_short?: number | null
+          price_xlong?: number | null
+        }
+        Relationships: []
+      }
+      professional_days_off: {
+        Row: {
+          created_at: string
+          day: string
+          id: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          day: string
+          id?: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          day?: string
+          id?: string
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      professional_schedules: {
+        Row: {
+          end_block: number
+          lunch_end_block: number | null
+          lunch_start_block: number | null
+          start_block: number
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          end_block?: number
+          lunch_end_block?: number | null
+          lunch_start_block?: number | null
+          start_block?: number
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          end_block?: number
+          lunch_end_block?: number | null
+          lunch_start_block?: number | null
+          start_block?: number
+          updated_at?: string
+          user_id?: string
         }
         Relationships: []
       }

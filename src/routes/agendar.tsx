@@ -61,6 +61,7 @@ function BookPage() {
   });
   const [cart, setCart] = useState<string[]>([]);
   const [appliedPromoId, setAppliedPromoId] = useState<string | null>(null);
+  const [hairLength, setHairLength] = useState<"short" | "medium" | "long" | "xlong">("medium");
   const [date, setDate] = useState<Date | undefined>(undefined);
   const [startBlocks, setStartBlocks] = useState<Record<string, number | null>>({});
   const [client, setClient] = useState({ name: "", phone: "" });
@@ -77,6 +78,15 @@ function BookPage() {
     if (!procs.data) return [];
     return procs.data.filter((p: any) => activeCategories.includes(p.category as any));
   }, [procs.data, activeCategories]);
+
+  const priceOf = (p: any) => {
+    if (p.category === "cabelo" && p.by_length) {
+      const key = { short: "price_short", medium: "price_medium", long: "price_long", xlong: "price_xlong" }[hairLength] as string;
+      const v = p[key];
+      if (v != null) return Number(v);
+    }
+    return Number(p.price);
+  };
 
   const cartProcs = useMemo(
     () => (procs.data ?? []).filter((p: any) => cart.includes(p.id)),
@@ -105,10 +115,12 @@ function BookPage() {
     () => new Set<string>(activePromo ? (activePromo.promotion_procedures ?? []).map((pp: any) => pp.procedure_id) : []),
     [activePromo],
   );
-  const originalTotal = cartProcs.reduce((s, p: any) => s + Number(p.price), 0);
-  const extraProcsTotal = cartProcs.filter((p: any) => !promoProcIds.has(p.id)).reduce((s, p: any) => s + Number(p.price), 0);
+  const originalTotal = cartProcs.reduce((s, p: any) => s + priceOf(p), 0);
+  const extraProcsTotal = cartProcs.filter((p: any) => !promoProcIds.has(p.id)).reduce((s, p: any) => s + priceOf(p), 0);
   const finalTotal = activePromo ? Number(activePromo.promo_price) + extraProcsTotal : originalTotal;
   const maxBlocks = proAssignments.length ? Math.max(...proAssignments.map((p) => p.blocks)) : 0;
+  const requireAdjacency = proAssignments.some((p) => p.role === "hairdresser") && proAssignments.some((p) => p.role === "manicurist");
+  const hasHair = activeCategories.includes("cabelo");
 
   const dateStr = date ? format(date, "yyyy-MM-dd") : null;
 
@@ -135,8 +147,10 @@ function BookPage() {
           clientPhone: client.phone,
           date: dateStr!,
           promotionId: appliedPromoId ?? undefined,
+          hairLength: hasHair ? hairLength : undefined,
           professionals: proAssignments.map((p) => ({
             professionalId: p.id,
+            role: p.role,
             procedureIds: p.procs.map((x: any) => x.id),
             startBlock: startBlocks[p.id]!,
           })),
@@ -290,6 +304,34 @@ function BookPage() {
             <h2 className="font-display text-2xl mb-1">Escolha os procedimentos</h2>
             <p className="text-sm text-muted-foreground mb-4">Selecione um ou mais. Aproveite uma promoção ativa e adicione outros serviços — o desconto se mantém.</p>
 
+            {hasHair && (
+              <div className="mb-6 rounded-xl border-2 border-primary/20 bg-primary/5 p-4">
+                <p className="text-xs uppercase tracking-widest text-primary mb-2 flex items-center gap-1">
+                  <Scissors className="h-3 w-3" /> Tamanho do cabelo
+                </p>
+                <p className="text-xs text-muted-foreground mb-3">Isso ajusta o preço dos procedimentos de cabelo que variam por tamanho.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {([
+                    { k: "short", label: "Curto" },
+                    { k: "medium", label: "Médio" },
+                    { k: "long", label: "Longo" },
+                    { k: "xlong", label: "Superlongo" },
+                  ] as const).map((o) => (
+                    <button
+                      key={o.k}
+                      onClick={() => setHairLength(o.k)}
+                      className={cn(
+                        "py-2 rounded-lg border-2 text-sm font-medium transition",
+                        hairLength === o.k ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/40",
+                      )}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {promos.data && promos.data.length > 0 && (
               <div className="mb-6 -mx-2">
                 <p className="text-xs uppercase tracking-widest text-primary mb-2 px-2 flex items-center gap-1">
@@ -355,7 +397,7 @@ function BookPage() {
                             <p className="text-xs text-muted-foreground">{blocksToDuration(p.duration_blocks)}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="font-semibold text-primary">{formatBRL(Number(p.price))}</p>
+                            <p className="font-semibold text-primary">{formatBRL(priceOf(p))}</p>
                             {selected ? <Minus className="h-4 w-4 ml-auto text-primary" /> : <Plus className="h-4 w-4 ml-auto text-muted-foreground" />}
                           </div>
                         </button>
@@ -398,7 +440,7 @@ function BookPage() {
                           <p className="text-xs text-muted-foreground">{blocksToDuration(p.duration_blocks)}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{formatBRL(Number(p.price))}</span>
+                          <span className="text-sm font-medium">{formatBRL(priceOf(p))}</span>
                           <Button size="icon" variant="ghost" onClick={() => toggleProc(p.id)}><Trash2 className="h-4 w-4" /></Button>
                         </div>
                       </li>
@@ -458,9 +500,11 @@ function BookPage() {
                       roleTitle={roleLabel[entry.role]}
                       professionalName={pro?.full_name ?? ""}
                       blocks={entry.blocks}
+                      dayOff={!!schedule.dayOff}
                       busy={new Set<number>(schedule.busy)}
                       available={new Set<number>(schedule.available)}
                       selected={selected}
+                      requireAdjacency={requireAdjacency}
                       otherSelections={otherEntries.map((o) => ({
                         start: startBlocks[o.id] ?? null,
                         blocks: o.blocks,
@@ -595,7 +639,7 @@ function BookPage() {
 }
 
 function ProScheduleGrid({
-  icon: Icon, roleTitle, professionalName, blocks, busy, available, selected, otherSelections, onPick,
+  icon: Icon, roleTitle, professionalName, blocks, busy, available, selected, otherSelections, onPick, dayOff, requireAdjacency,
 }: {
   icon: typeof Scissors;
   roleTitle: string;
@@ -606,6 +650,8 @@ function ProScheduleGrid({
   selected: number | null;
   otherSelections: { start: number | null; blocks: number }[];
   onPick: (b: number) => void;
+  dayOff?: boolean;
+  requireAdjacency?: boolean;
 }) {
   const all: number[] = [];
   for (let b = OPEN_BLOCK; b < CLOSE_BLOCK; b++) all.push(b);
@@ -618,6 +664,31 @@ function ProScheduleGrid({
     }
     return false;
   };
+  const nonAdjacent = (s: number) => {
+    if (!requireAdjacency) return false;
+    for (const o of otherSelections) {
+      if (o.start == null) continue;
+      const adj = s + blocks === o.start || s === o.start + o.blocks;
+      if (!adj) return true;
+    }
+    return false;
+  };
+
+  if (dayOff) {
+    return (
+      <div>
+        <div className="flex items-center gap-2 mb-2">
+          <div className="h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center">
+            <Icon className="h-4 w-4" />
+          </div>
+          <div>
+            <p className="text-sm font-medium leading-tight">{roleTitle} — {professionalName}</p>
+            <p className="text-xs text-destructive">Profissional está de folga nesta data.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div>
@@ -627,7 +698,10 @@ function ProScheduleGrid({
         </div>
         <div>
           <p className="text-sm font-medium leading-tight">{roleTitle} — {professionalName}</p>
-          <p className="text-xs text-muted-foreground">{blocksToDuration(blocks)} de atendimento</p>
+          <p className="text-xs text-muted-foreground">
+            {blocksToDuration(blocks)} de atendimento
+            {requireAdjacency && " · precisa ser adjacente ao outro serviço"}
+          </p>
         </div>
       </div>
       <div className="grid grid-cols-4 sm:grid-cols-6 gap-1.5">
@@ -637,6 +711,7 @@ function ProScheduleGrid({
           const isSelected = selected === b;
           const isOccupiedBySelection = selected != null && b > selected && b < selected + blocks;
           const conflict = isValidStart && !isSelected && conflictsOther(b);
+          const adjFail = isValidStart && !isSelected && !conflict && nonAdjacent(b);
 
           let cls = "border-border/70 text-muted-foreground/70 bg-muted/40 cursor-not-allowed";
           let disabled = true;
@@ -654,6 +729,10 @@ function ProScheduleGrid({
             cls = "border-amber-400/50 bg-amber-100/40 text-amber-800/70 cursor-not-allowed line-through";
             disabled = true;
             title = "Conflita com o outro profissional";
+          } else if (adjFail) {
+            cls = "border-border/60 bg-muted/40 text-muted-foreground/60 cursor-not-allowed";
+            disabled = true;
+            title = "Precisa ser imediatamente antes ou depois do outro serviço";
           } else if (isValidStart) {
             cls = "border-primary/30 bg-background hover:border-primary hover:bg-primary/5 text-foreground";
             disabled = false;

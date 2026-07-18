@@ -2,8 +2,25 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { OPEN_BLOCK, CLOSE_BLOCK } from "./time";
 
-const ADMIN_EMAIL = "adm@salao.app";
-const ADMIN_DEFAULT_PASSWORD = "123";
+const ADMIN_EMAIL = "admin@salao.app";
+const ADMIN_USERNAME = "admin";
+const ADMIN_DEFAULT_PASSWORD = "Adm.vcm@123!";
+
+export type HairLength = "short" | "medium" | "long" | "xlong";
+
+function priceForProc(p: any, hairLength?: HairLength | null): number {
+  if (p.category === "cabelo" && p.by_length && hairLength) {
+    const map: Record<HairLength, string> = {
+      short: "price_short",
+      medium: "price_medium",
+      long: "price_long",
+      xlong: "price_xlong",
+    };
+    const v = p[map[hairLength]];
+    if (v != null) return Number(v);
+  }
+  return Number(p.price);
+}
 
 // ---------- Public reads ----------
 
@@ -54,7 +71,7 @@ export const listActivePromotions = createServerFn({ method: "GET" }).handler(as
   const today = new Date().toISOString().slice(0, 10);
   const { data, error } = await supabaseAdmin
     .from("promotions")
-    .select("*, promotion_procedures(procedure_id, procedures(id, name, category, duration_blocks, price))")
+    .select("*, promotion_procedures(procedure_id, procedures(id, name, category, duration_blocks, price, by_length, price_short, price_medium, price_long, price_xlong))")
     .lte("start_date", today)
     .gte("end_date", today)
     .order("created_at", { ascending: false });
@@ -62,7 +79,56 @@ export const listActivePromotions = createServerFn({ method: "GET" }).handler(as
   return data ?? [];
 });
 
-// ---------- Slot algorithm (multi-professional aware) ----------
+// ---------- Availability helpers ----------
+
+async function loadProContext(ids: string[], date: string) {
+  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const [{ data: appts }, { data: schedules }, { data: daysOff }] = await Promise.all([
+    supabaseAdmin
+      .from("appointments")
+      .select("professional_id, start_block, total_blocks")
+      .in("professional_id", ids)
+      .eq("scheduled_date", date)
+      .eq("status", "confirmed"),
+    supabaseAdmin.from("professional_schedules").select("*").in("user_id", ids),
+    supabaseAdmin.from("professional_days_off").select("user_id, day").in("user_id", ids).eq("day", date),
+  ]);
+  const schedMap = new Map<string, any>();
+  (schedules ?? []).forEach((s) => schedMap.set(s.user_id, s));
+  const dayOffSet = new Set<string>((daysOff ?? []).map((d) => d.user_id));
+  const busyByPro = new Map<string, Set<number>>();
+  ids.forEach((id) => busyByPro.set(id, new Set()));
+  (appts ?? []).forEach((a) => {
+    const set = busyByPro.get(a.professional_id)!;
+    for (let i = 0; i < a.total_blocks; i++) set.add(a.start_block + i);
+  });
+  return { busyByPro, schedMap, dayOffSet };
+}
+
+function proWindow(sched: any | undefined) {
+  const start = sched?.start_block ?? OPEN_BLOCK;
+  const end = sched?.end_block ?? CLOSE_BLOCK;
+  const lunchStart = sched?.lunch_start_block ?? null;
+  const lunchEnd = sched?.lunch_end_block ?? null;
+  return { start, end, lunchStart, lunchEnd };
+}
+
+function isValidStart(
+  s: number,
+  blocks: number,
+  window: ReturnType<typeof proWindow>,
+  busy: Set<number>,
+) {
+  if (s < window.start || s + blocks > window.end) return false;
+  for (let i = 0; i < blocks; i++) {
+    const b = s + i;
+    if (busy.has(b)) return false;
+    if (window.lunchStart != null && window.lunchEnd != null && b >= window.lunchStart && b < window.lunchEnd) return false;
+  }
+  return true;
+}
+
+// ---------- Slot algorithm ----------
 
 export const getAvailableSlots = createServerFn({ method: "POST" })
   .inputValidator((input: { professionals: { id: string; blocks: number }[]; date: string }) =>
@@ -77,45 +143,27 @@ export const getAvailableSlots = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const ids = data.professionals.map((p) => p.id);
-    const { data: appts, error } = await supabaseAdmin
-      .from("appointments")
-      .select("professional_id, start_block, total_blocks")
-      .in("professional_id", ids)
-      .eq("scheduled_date", data.date)
-      .eq("status", "confirmed");
-    if (error) throw new Error(error.message);
+    const { busyByPro, schedMap, dayOffSet } = await loadProContext(ids, data.date);
 
-    const busyByPro = new Map<string, Set<number>>();
-    ids.forEach((id) => busyByPro.set(id, new Set()));
-    (appts ?? []).forEach((a) => {
-      const set = busyByPro.get(a.professional_id)!;
-      for (let i = 0; i < a.total_blocks; i++) set.add(a.start_block + i);
-    });
-
-    const maxBlocks = Math.max(...data.professionals.map((p) => p.blocks));
     const now = new Date();
     const isToday = data.date === now.toISOString().slice(0, 10);
     const nowBlock = now.getHours() * 2 + (now.getMinutes() >= 30 ? 1 : 0);
 
     const slots: number[] = [];
-    for (let s = OPEN_BLOCK; s + maxBlocks <= CLOSE_BLOCK; s++) {
+    for (let s = 0; s + 1 < 48; s++) {
       if (isToday && s <= nowBlock) continue;
       let ok = true;
       for (const p of data.professionals) {
-        const busy = busyByPro.get(p.id)!;
-        for (let i = 0; i < p.blocks; i++) {
-          if (busy.has(s + i)) { ok = false; break; }
-        }
-        if (!ok) break;
+        if (dayOffSet.has(p.id)) { ok = false; break; }
+        const w = proWindow(schedMap.get(p.id));
+        if (!isValidStart(s, p.blocks, w, busyByPro.get(p.id)!)) { ok = false; break; }
       }
       if (ok) slots.push(s);
     }
     return slots;
   });
 
-// Per-professional day schedule: returns busy + valid start blocks for each pro independently.
 export const getDaySchedules = createServerFn({ method: "POST" })
   .inputValidator((input: { professionals: { id: string; blocks: number }[]; date: string }) =>
     z
@@ -129,58 +177,53 @@ export const getDaySchedules = createServerFn({ method: "POST" })
       .parse(input),
   )
   .handler(async ({ data }) => {
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
     const ids = data.professionals.map((p) => p.id);
-    const { data: appts, error } = await supabaseAdmin
-      .from("appointments")
-      .select("professional_id, start_block, total_blocks")
-      .in("professional_id", ids)
-      .eq("scheduled_date", data.date)
-      .eq("status", "confirmed");
-    if (error) throw new Error(error.message);
-
-    const busyByPro = new Map<string, Set<number>>();
-    ids.forEach((id) => busyByPro.set(id, new Set()));
-    (appts ?? []).forEach((a) => {
-      const set = busyByPro.get(a.professional_id)!;
-      for (let i = 0; i < a.total_blocks; i++) set.add(a.start_block + i);
-    });
+    const { busyByPro, schedMap, dayOffSet } = await loadProContext(ids, data.date);
 
     const now = new Date();
     const isToday = data.date === now.toISOString().slice(0, 10);
     const nowBlock = now.getHours() * 2 + (now.getMinutes() >= 30 ? 1 : 0);
 
     return data.professionals.map((p) => {
+      const w = proWindow(schedMap.get(p.id));
       const busy = busyByPro.get(p.id)!;
+      const dayOff = dayOffSet.has(p.id);
       const available: number[] = [];
-      for (let s = OPEN_BLOCK; s + p.blocks <= CLOSE_BLOCK; s++) {
-        if (isToday && s <= nowBlock) continue;
-        let ok = true;
-        for (let i = 0; i < p.blocks; i++) {
-          if (busy.has(s + i)) { ok = false; break; }
+      if (!dayOff) {
+        for (let s = w.start; s + p.blocks <= w.end; s++) {
+          if (isToday && s <= nowBlock) continue;
+          if (isValidStart(s, p.blocks, w, busy)) available.push(s);
         }
-        if (ok) available.push(s);
+      }
+      // Merge lunch blocks into "busy" for display purposes.
+      const displayBusy = new Set<number>(busy);
+      if (w.lunchStart != null && w.lunchEnd != null) {
+        for (let b = w.lunchStart; b < w.lunchEnd; b++) displayBusy.add(b);
       }
       return {
         id: p.id,
         blocks: p.blocks,
-        busy: Array.from(busy).sort((a, b) => a - b),
+        window: w,
+        dayOff,
+        busy: Array.from(displayBusy).sort((a, b) => a - b),
         available,
       };
     });
   });
 
-// ---------- Booking (multi-professional, per-pro start time) ----------
+// ---------- Booking ----------
 
 const bookingSchema = z.object({
   clientName: z.string().trim().min(2).max(120),
   clientPhone: z.string().trim().min(8).max(20),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
   promotionId: z.string().uuid().optional(),
+  hairLength: z.enum(["short", "medium", "long", "xlong"]).optional(),
   professionals: z
     .array(
       z.object({
         professionalId: z.string().uuid(),
+        role: z.enum(["hairdresser", "manicurist"]),
         procedureIds: z.array(z.string().uuid()).min(1).max(10),
         startBlock: z.number().int().min(0).max(47),
       }),
@@ -197,21 +240,26 @@ export const createAppointment = createServerFn({ method: "POST" })
     const allProcIds = Array.from(new Set(data.professionals.flatMap((p) => p.procedureIds)));
     const { data: procs, error: pErr } = await supabaseAdmin
       .from("procedures")
-      .select("id, name, price, duration_blocks, category")
+      .select("id, name, price, duration_blocks, category, by_length, price_short, price_medium, price_long, price_xlong")
       .in("id", allProcIds);
     if (pErr) throw new Error(pErr.message);
     if (!procs || procs.length !== allProcIds.length) throw new Error("Procedimento inválido");
-
     const procMap = new Map(procs.map((p) => [p.id, p]));
 
-    // Compute per-pro totals
     const perPro = data.professionals.map((entry) => {
       const items = entry.procedureIds.map((id) => {
-        const p = procMap.get(id)!;
-        return { id: p.id, name: p.name, price: Number(p.price), blocks: p.duration_blocks };
+        const p: any = procMap.get(id)!;
+        return {
+          id: p.id,
+          name: p.name,
+          price: priceForProc(p, data.hairLength ?? null),
+          blocks: p.duration_blocks,
+          category: p.category,
+        };
       });
       return {
         professionalId: entry.professionalId,
+        role: entry.role,
         startBlock: entry.startBlock,
         items,
         totalBlocks: items.reduce((s, i) => s + i.blocks, 0),
@@ -219,34 +267,29 @@ export const createAppointment = createServerFn({ method: "POST" })
       };
     });
 
-    for (const p of perPro) {
-      if (p.startBlock < OPEN_BLOCK || p.startBlock + p.totalBlocks > CLOSE_BLOCK) {
-        throw new Error("Horário fora do expediente");
-      }
+    // Adjacency rule: when hair + nails are booked together, nails must be
+    // immediately before or after hair (no gap, no overlap).
+    const hair = perPro.find((p) => p.role === "hairdresser");
+    const nails = perPro.find((p) => p.role === "manicurist");
+    if (hair && nails) {
+      const nailsEnd = nails.startBlock + nails.totalBlocks;
+      const hairEnd = hair.startBlock + hair.totalBlocks;
+      const adjacent = nailsEnd === hair.startBlock || hairEnd === nails.startBlock;
+      if (!adjacent) throw new Error("A manicure precisa estar imediatamente antes ou depois do horário do cabelo.");
     }
 
-    // Re-check availability per pro at its own startBlock
+    // Working-hours + availability check
     const ids = perPro.map((p) => p.professionalId);
-    const { data: appts } = await supabaseAdmin
-      .from("appointments")
-      .select("professional_id, start_block, total_blocks")
-      .in("professional_id", ids)
-      .eq("scheduled_date", data.date)
-      .eq("status", "confirmed");
-    const busyByPro = new Map<string, Set<number>>();
-    ids.forEach((id) => busyByPro.set(id, new Set()));
-    (appts ?? []).forEach((a) => {
-      const set = busyByPro.get(a.professional_id)!;
-      for (let i = 0; i < a.total_blocks; i++) set.add(a.start_block + i);
-    });
+    const { busyByPro, schedMap, dayOffSet } = await loadProContext(ids, data.date);
     for (const p of perPro) {
-      const busy = busyByPro.get(p.professionalId)!;
-      for (let i = 0; i < p.totalBlocks; i++) {
-        if (busy.has(p.startBlock + i)) throw new Error("Horário não está mais disponível");
+      if (dayOffSet.has(p.professionalId)) throw new Error("Profissional está de folga nesta data.");
+      const w = proWindow(schedMap.get(p.professionalId));
+      if (!isValidStart(p.startBlock, p.totalBlocks, w, busyByPro.get(p.professionalId)!)) {
+        throw new Error("Horário não está mais disponível.");
       }
     }
 
-    // Promotion validation: superset match (cart contains all promo procs)
+    // Promotion validation: superset match
     let promotion: any = null;
     let promoProcIds = new Set<string>();
     if (data.promotionId) {
@@ -289,7 +332,6 @@ export const createAppointment = createServerFn({ method: "POST" })
       clientId = ins.id;
     }
 
-    // Distribute promo discount pro-rata across pros by each pro's share of promo-proc price
     const groupId = crypto.randomUUID();
     const discount = promotion ? Number(promotion.original_price) - Number(promotion.promo_price) : 0;
     const promoSumByPro = new Map<string, number>();
@@ -339,12 +381,7 @@ export const createAppointment = createServerFn({ method: "POST" })
       );
     }
 
-    return {
-      ids: createdIds,
-      groupId,
-      totalPrice: sumAppliedTotal,
-      promotionApplied: !!promotion,
-    };
+    return { ids: createdIds, groupId, totalPrice: sumAppliedTotal, promotionApplied: !!promotion };
   });
 
 // ---------- Client lookup / cancel ----------
@@ -395,7 +432,6 @@ export const cancelAppointmentByPhone = createServerFn({ method: "POST" })
       .eq("phone", phone)
       .maybeSingle();
     if (!client) throw new Error("Cliente não encontrado");
-    // Fetch appointment to find group
     const { data: appt } = await supabaseAdmin
       .from("appointments")
       .select("id, group_id, client_id")
@@ -427,7 +463,7 @@ export const ensureAdminUser = createServerFn({ method: "POST" }).handler(async 
   const { data: existing } = await supabaseAdmin
     .from("profiles")
     .select("id, email")
-    .eq("username", "adm")
+    .eq("username", ADMIN_USERNAME)
     .maybeSingle();
   if (existing) return { email: existing.email ?? ADMIN_EMAIL };
 
@@ -435,12 +471,12 @@ export const ensureAdminUser = createServerFn({ method: "POST" }).handler(async 
     email: ADMIN_EMAIL,
     password: ADMIN_DEFAULT_PASSWORD,
     email_confirm: true,
-    user_metadata: { username: "adm" },
+    user_metadata: { username: ADMIN_USERNAME },
   });
   if (error || !created.user) throw new Error(error?.message ?? "Falha ao criar admin");
   await supabaseAdmin.from("profiles").insert({
     id: created.user.id,
-    username: "adm",
+    username: ADMIN_USERNAME,
     full_name: "Administrador",
     email: ADMIN_EMAIL,
   });
@@ -461,6 +497,6 @@ export const resolveLoginEmail = createServerFn({ method: "POST" })
       .eq("username", data.username)
       .maybeSingle();
     if (prof?.email) return { email: prof.email };
-    if (data.username === "adm") return { email: ADMIN_EMAIL };
+    if (data.username === ADMIN_USERNAME) return { email: ADMIN_EMAIL };
     throw new Error("Usuário não encontrado");
   });
