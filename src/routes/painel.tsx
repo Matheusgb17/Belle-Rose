@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
-  LogOut, Calendar, Users, Scissors, Tag, LayoutDashboard, Plus, Trash2, Edit, X, Settings,
+  LogOut, Calendar as CalendarIcon, Users, Scissors, Tag, LayoutDashboard, Plus, Trash2, Edit, X, Settings, Clock, CalendarOff,
 } from "lucide-react";
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, PieChart, Pie, Cell } from "recharts";
 
@@ -19,6 +19,8 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Calendar as UICalendar } from "@/components/ui/calendar";
 import { supabase } from "@/integrations/supabase/client";
 import {
   meRoles, dashboardStats, listAppointments, cancelAppointmentStaff,
@@ -26,9 +28,10 @@ import {
   listAllProfessionals, createProfessional, toggleProfessional, deleteProfessional,
   upsertPromotion, deletePromotion, listAllPromotions,
   updateSalonSettings,
+  getMySchedule, updateMySchedule, listMyDaysOff, addMyDayOff, removeMyDayOff,
 } from "@/lib/admin.functions";
 import { listProcedures, getSalonSettings } from "@/lib/booking.functions";
-import { blockToTime, formatBRL, blocksToDuration } from "@/lib/time";
+import { blockToTime, formatBRL, blocksToDuration, OPEN_BLOCK, CLOSE_BLOCK } from "@/lib/time";
 import { BrandLogo } from "@/components/logo";
 
 export const Route = createFileRoute("/painel")({
