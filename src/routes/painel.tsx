@@ -612,3 +612,133 @@ function SettingsTab() {
     </div>
   );
 }
+
+function MyScheduleTab() {
+  const qc = useQueryClient();
+  const schedFn = useServerFn(getMySchedule);
+  const updateFn = useServerFn(updateMySchedule);
+  const listDaysFn = useServerFn(listMyDaysOff);
+  const addDayFn = useServerFn(addMyDayOff);
+  const removeDayFn = useServerFn(removeMyDayOff);
+
+  const schedule = useQuery({ queryKey: ["my-schedule"], queryFn: () => schedFn({}) });
+  const daysOff = useQuery({ queryKey: ["my-days-off"], queryFn: () => listDaysFn({}) });
+
+  const [form, setForm] = useState<{ start_block: number; end_block: number; lunch_start_block: number | null; lunch_end_block: number | null }>({
+    start_block: OPEN_BLOCK, end_block: CLOSE_BLOCK, lunch_start_block: 24, lunch_end_block: 26,
+  });
+  const [hasLunch, setHasLunch] = useState(true);
+  const [pickDate, setPickDate] = useState<Date | undefined>(undefined);
+
+  useEffect(() => {
+    if (schedule.data) {
+      setForm({
+        start_block: schedule.data.start_block ?? OPEN_BLOCK,
+        end_block: schedule.data.end_block ?? CLOSE_BLOCK,
+        lunch_start_block: schedule.data.lunch_start_block,
+        lunch_end_block: schedule.data.lunch_end_block,
+      });
+      setHasLunch(schedule.data.lunch_start_block != null);
+    }
+  }, [schedule.data]);
+
+  const save = useMutation({
+    mutationFn: () => updateFn({ data: {
+      start_block: form.start_block,
+      end_block: form.end_block,
+      lunch_start_block: hasLunch ? form.lunch_start_block : null,
+      lunch_end_block: hasLunch ? form.lunch_end_block : null,
+    } }),
+    onSuccess: () => { toast.success("Agenda atualizada"); qc.invalidateQueries({ queryKey: ["my-schedule"] }); },
+    onError: (e: any) => toast.error(e?.message ?? "Erro"),
+  });
+
+  const addDay = useMutation({
+    mutationFn: (day: string) => addDayFn({ data: { day } }),
+    onSuccess: () => { toast.success("Dia de folga registrado"); qc.invalidateQueries({ queryKey: ["my-days-off"] }); setPickDate(undefined); },
+    onError: (e: any) => toast.error(e?.message ?? "Erro"),
+  });
+
+  const removeDay = useMutation({
+    mutationFn: (id: string) => removeDayFn({ data: { id } }),
+    onSuccess: () => { toast.success("Folga removida"); qc.invalidateQueries({ queryKey: ["my-days-off"] }); },
+  });
+
+  const blockOpts: number[] = [];
+  for (let b = 0; b <= 48; b++) blockOpts.push(b);
+
+  return (
+    <div className="grid md:grid-cols-2 gap-6">
+      <Card className="p-6">
+        <h3 className="font-display text-xl mb-1 flex items-center gap-2"><Clock className="h-5 w-5 text-primary" />Meu horário de trabalho</h3>
+        <p className="text-sm text-muted-foreground mb-4">Defina início, fim e almoço. Só os horários dentro dessa faixa serão oferecidos às clientes.</p>
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <Label>Início</Label>
+            <Select value={String(form.start_block)} onValueChange={(v) => setForm({ ...form, start_block: Number(v) })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{blockOpts.slice(0, 48).map((b) => <SelectItem key={b} value={String(b)}>{blockToTime(b)}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+          <div>
+            <Label>Fim</Label>
+            <Select value={String(form.end_block)} onValueChange={(v) => setForm({ ...form, end_block: Number(v) })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>{blockOpts.slice(1).map((b) => <SelectItem key={b} value={String(b)}>{blockToTime(b)}</SelectItem>)}</SelectContent>
+            </Select>
+          </div>
+        </div>
+        <div className="mt-4 flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium">Tem intervalo de almoço</p>
+            <p className="text-xs text-muted-foreground">Bloqueia esse período na agenda.</p>
+          </div>
+          <Switch checked={hasLunch} onCheckedChange={setHasLunch} />
+        </div>
+        {hasLunch && (
+          <div className="grid grid-cols-2 gap-3 mt-3">
+            <div>
+              <Label>Almoço — início</Label>
+              <Select value={String(form.lunch_start_block ?? 24)} onValueChange={(v) => setForm({ ...form, lunch_start_block: Number(v) })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{blockOpts.slice(0, 48).map((b) => <SelectItem key={b} value={String(b)}>{blockToTime(b)}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Almoço — fim</Label>
+              <Select value={String(form.lunch_end_block ?? 26)} onValueChange={(v) => setForm({ ...form, lunch_end_block: Number(v) })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>{blockOpts.slice(1).map((b) => <SelectItem key={b} value={String(b)}>{blockToTime(b)}</SelectItem>)}</SelectContent>
+              </Select>
+            </div>
+          </div>
+        )}
+        <Button onClick={() => save.mutate()} disabled={save.isPending} className="mt-4 w-full">Salvar horários</Button>
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="font-display text-xl mb-1 flex items-center gap-2"><CalendarOff className="h-5 w-5 text-primary" />Dias de folga</h3>
+        <p className="text-sm text-muted-foreground mb-3">Marque dias em que você não vai atender. As clientes não poderão agendar nesses dias. Agendamentos já feitos permanecem — entre em contato com a cliente para cancelar individualmente.</p>
+        <UICalendar
+          mode="single"
+          selected={pickDate}
+          onSelect={setPickDate}
+          className={cn("p-3 pointer-events-auto rounded-md border")}
+          disabled={(d) => d < new Date(new Date().toDateString())}
+        />
+        <Button className="mt-3 w-full" disabled={!pickDate || addDay.isPending} onClick={() => pickDate && addDay.mutate(pickDate.toISOString().slice(0, 10))}>
+          Adicionar folga
+        </Button>
+        <div className="mt-4 space-y-2">
+          {(daysOff.data ?? []).map((d: any) => (
+            <div key={d.id} className="flex items-center justify-between rounded-lg border p-2">
+              <p className="text-sm">{new Date(d.day + "T00:00").toLocaleDateString("pt-BR", { weekday: "short", day: "2-digit", month: "short" })}</p>
+              <Button size="sm" variant="ghost" onClick={() => removeDay.mutate(d.id)}><Trash2 className="h-4 w-4" /></Button>
+            </div>
+          ))}
+          {(daysOff.data ?? []).length === 0 && <p className="text-xs text-muted-foreground text-center py-4">Nenhuma folga futura registrada.</p>}
+        </div>
+      </Card>
+    </div>
+  );
+}
