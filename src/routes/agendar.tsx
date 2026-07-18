@@ -397,7 +397,7 @@ function BookPage() {
                             <p className="text-xs text-muted-foreground">{blocksToDuration(p.duration_blocks)}</p>
                           </div>
                           <div className="text-right shrink-0">
-                            <p className="font-semibold text-primary">{formatBRL(Number(p.price))}</p>
+                            <p className="font-semibold text-primary">{formatBRL(priceOf(p))}</p>
                             {selected ? <Minus className="h-4 w-4 ml-auto text-primary" /> : <Plus className="h-4 w-4 ml-auto text-muted-foreground" />}
                           </div>
                         </button>
@@ -440,7 +440,7 @@ function BookPage() {
                           <p className="text-xs text-muted-foreground">{blocksToDuration(p.duration_blocks)}</p>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{formatBRL(Number(p.price))}</span>
+                          <span className="text-sm font-medium">{formatBRL(priceOf(p))}</span>
                           <Button size="icon" variant="ghost" onClick={() => toggleProc(p.id)}><Trash2 className="h-4 w-4" /></Button>
                         </div>
                       </li>
