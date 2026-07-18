@@ -304,6 +304,34 @@ function BookPage() {
             <h2 className="font-display text-2xl mb-1">Escolha os procedimentos</h2>
             <p className="text-sm text-muted-foreground mb-4">Selecione um ou mais. Aproveite uma promoção ativa e adicione outros serviços — o desconto se mantém.</p>
 
+            {hasHair && (
+              <div className="mb-6 rounded-xl border-2 border-primary/20 bg-primary/5 p-4">
+                <p className="text-xs uppercase tracking-widest text-primary mb-2 flex items-center gap-1">
+                  <Scissors className="h-3 w-3" /> Tamanho do cabelo
+                </p>
+                <p className="text-xs text-muted-foreground mb-3">Isso ajusta o preço dos procedimentos de cabelo que variam por tamanho.</p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {([
+                    { k: "short", label: "Curto" },
+                    { k: "medium", label: "Médio" },
+                    { k: "long", label: "Longo" },
+                    { k: "xlong", label: "Superlongo" },
+                  ] as const).map((o) => (
+                    <button
+                      key={o.k}
+                      onClick={() => setHairLength(o.k)}
+                      className={cn(
+                        "py-2 rounded-lg border-2 text-sm font-medium transition",
+                        hairLength === o.k ? "border-primary bg-primary text-primary-foreground" : "border-border bg-background hover:border-primary/40",
+                      )}
+                    >
+                      {o.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {promos.data && promos.data.length > 0 && (
               <div className="mb-6 -mx-2">
                 <p className="text-xs uppercase tracking-widest text-primary mb-2 px-2 flex items-center gap-1">
